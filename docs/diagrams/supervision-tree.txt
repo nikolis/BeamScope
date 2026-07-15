@@ -1,0 +1,36 @@
+BeamScope — Foundational Supervision Tree (embedded mode)
+=========================================================
+
+Skeleton starts EMPTY (lib/beam_scope/application.ex) so the project compiles
+without claiming to work. Children are added per docs/ROADMAP.md.
+
+  BeamScope.Supervisor                      strategy: :one_for_one
+  │
+  ├── BeamScope.ClusterState                (Inc 1)  ADR-0006
+  │       owns the per-node replica (GenServer owning an ETS table);
+  │       merge/expire/get/nodes. Must start before anything that reads/writes it.
+  │
+  ├── BeamScope.Aggregation.Supervisor      (Inc 1+3)  ADR-0003 / ADR-0008
+  │   │   strategy: :one_for_one  (:rest_for_one where a provider depends on shared setup)
+  │   ├── BeamScope.Provider.VM              (Inc 1)   :telemetry_poller
+  │   ├── BeamScope.Provider.Scheduler       (Inc 3)
+  │   ├── BeamScope.Provider.Process         (Inc 3)
+  │   └── BeamScope.Provider.ETS             (Inc 3)
+  │        each provider is feature-toggled (enabled?/0); a crash is isolated to its domain.
+  │
+  ├── BeamScope.Synchronization             (Inc 2)  ADR-0005
+  │       the configured strategy (default: SnapshotGossip over Phoenix.PubSub);
+  │       subscribes to the shared topic, broadcasts on tick, drives ClusterState merge/expire.
+  │
+  └── BeamScope.Exporters.Supervisor        (Inc 4)  ADR-0007
+      │   strategy: :one_for_one
+      ├── BeamScope.Exporter.Prometheus      (Inc 4)  telemetry_metrics_prometheus
+      └── BeamScope.Exporter.Dashboard       (Inc 4)  LiveDashboard page / minimal LiveView
+           stateless leaves; feature-toggled; a crash cannot affect the model.
+
+Host-provided (referenced by name via config, NOT started by BeamScope):
+  • Phoenix.PubSub server         (used by default synchronization)
+  • clustering (libcluster/etc.)  (node discovery/connectivity)
+
+Startup ordering rationale: ClusterState first (everyone reads/writes it) →
+aggregation (produces snapshots) → synchronization (moves them) → exporters (read them).

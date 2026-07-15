@@ -1,0 +1,41 @@
+BeamScope — Core Pipeline (ADR-0001)
+====================================
+
+One-way flow. Exporters never write back into the model.
+
+    ┌──────────────────────────┐
+    │  Telemetry / Event Source │   :telemetry events, :telemetry_poller measurements
+    └────────────┬─────────────┘
+                 │  (hot path: high frequency, bursty)
+                 ▼
+    ┌──────────────────────────┐
+    │  Local Aggregation Engine │   ETS (:write_concurrency) + :counters/:persistent_term
+    │        (ADR-0003)         │   bounded, lock-free; folds events into an accumulator
+    └────────────┬─────────────┘
+                 │  periodic batching tick (default 1s)  ── caps network cost ──┐
+                 ▼                                                              │
+    ┌──────────────────────────┐                                               │
+    │   Runtime Object Model    │   rich structs, NOT raw counters:            │
+    │        (ADR-0004)         │   ClusterNode · VM · Scheduler ·             │
+    │                          │   ProcessSummary · ETS   (versioned)         │
+    └────────────┬─────────────┘                                               │
+                 │  compact, versioned snapshot                                │
+                 ▼                                                              │
+    ┌──────────────────────────┐                                               │
+    │     Synchronization       │   behaviour; default = snapshot gossip       │
+    │        (ADR-0005)         │   over Phoenix.PubSub. No consensus/locks.    │
+    └────────────┬─────────────┘   << snapshots only, never raw telemetry >>───┘
+                 │  broadcast ▲ / merge peers ▼  (LWW per node, by version)
+                 ▼
+    ┌──────────────────────────┐
+    │  Cluster Runtime Model    │   BeamScope.ClusterState — ONE replica per node
+    │  (ClusterState, ADR-0006) │   merge/expire behind a stable API; CRDTs optional, hidden
+    └────────────┬─────────────┘
+                 │  read-only projection
+                 ▼
+    ┌──────────────────────────┐
+    │        Exporters          │   stateless adapters (leaves):
+    │        (ADR-0007)         │   Prometheus · LiveDashboard · OpenTelemetry (post-MVP)
+    └──────────────────────────┘
+
+Principle: SYNCHRONIZE OBSERVATIONS, NOT REPLICATE DATA.

@@ -1,0 +1,31 @@
+BeamScope — Cluster Topology (ADR-0002, embedded library-first)
+==============================================================
+
+Every node is IDENTICAL. No central aggregator. No coordinator.
+Each node owns a FULL replica of ClusterState and can answer any query locally.
+
+        node A (app + BeamScope)          node B (app + BeamScope)          node C (app + BeamScope)
+   ┌───────────────────────────┐    ┌───────────────────────────┐    ┌───────────────────────────┐
+   │ providers → aggregation    │    │ providers → aggregation    │    │ providers → aggregation    │
+   │        → snapshot(vA)      │    │        → snapshot(vB)      │    │        → snapshot(vC)      │
+   │             │             │    │             │             │    │             │             │
+   │        ClusterState        │    │        ClusterState        │    │        ClusterState        │
+   │     {A:vA, B:vB, C:vC}     │    │     {A:vA, B:vB, C:vC}     │    │     {A:vA, B:vB, C:vC}     │
+   │             │             │    │             │             │    │             │             │
+   │      exporters (local)     │    │      exporters (local)     │    │      exporters (local)     │
+   └───────────┬───────────────┘    └───────────┬───────────────┘    └───────────┬───────────────┘
+               │                                │                                │
+               └────────────────┬───────────────┴────────────────┬───────────────┘
+                                ▼                                ▼
+                    ══════════════════════════════════════════════════════
+                      Phoenix.PubSub  (host-provided, shared topic)
+                      broadcasts COMPACT VERSIONED SNAPSHOTS only
+                    ══════════════════════════════════════════════════════
+
+Membership & liveness:
+  • node discovery/connectivity = HOST's job (libcluster / dns_cluster / distribution)
+  • BeamScope observes via Node.list/0 + :net_kernel.monitor_nodes/1
+  • absent node  →  snapshots stop  →  entry ages :live → :stale → :expired  (ADR-0005 TTL)
+
+Deferred alternative (roadmap): a SIDECAR observer node using an :erpc/pull
+synchronization strategy — expressible without core changes.
