@@ -53,6 +53,32 @@ mix deps.get
 mix deps.compile beam_scope
 ```
 
+### Umbrella projects
+
+In an umbrella, dependencies live in each **child app's** `mix.exs`, not the umbrella root.
+Add BeamScope to the single child app that should own observability — usually the one that
+already owns `Phoenix.PubSub` (often the web app) or a dedicated `apps/my_app_telemetry`:
+
+```elixir
+# apps/my_app_web/mix.exs
+defp deps do
+  [
+    {:beam_scope, github: "nikolisgal/beam_scope"}
+    # A path dep to a sibling app inside the umbrella uses in_umbrella:
+    # {:beam_scope, in_umbrella: true}   # only if beam_scope is itself an app under apps/
+  ]
+end
+```
+
+You do **not** need to add BeamScope to every child app. BeamScope is an OTP application with
+its own supervision tree, so as long as *one* started app in the release depends on it (and thus
+lists it under `extra_applications`/deps), it boots once for the whole node — every child app
+running on that node shares the same per-node `ClusterState`.
+
+Configuration is shared across the umbrella, so put the `config :beam_scope, ...` block in the
+**umbrella root** `config/config.exs` (see step 3), not in a child app's config. Point `:pubsub`
+at the PubSub server name your umbrella actually starts (e.g. `MyAppWeb.PubSub`).
+
 ## 2. Pull in the optional dependencies you need
 
 BeamScope's **core** (telemetry aggregation, cluster model, sync) only needs `telemetry`,

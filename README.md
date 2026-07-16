@@ -83,6 +83,20 @@ Per-node topology — every node is identical, no coordinator:
 
 Diagrams live under `docs/diagrams/`. Roadmap: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
+## Installation
+
+BeamScope is an embedded library ([ADR-0002](docs/adr/0002-deployment-topology-embedded-library-first.md))
+— it runs inside each node of your existing app. See
+[`docs/INSTALL.md`](docs/INSTALL.md) for the full source-install guide (git/path deps, config,
+exporters, umbrella projects, and verification).
+
+```elixir
+# mix.exs
+defp deps do
+  [{:beam_scope, github: "nikolisgal/beam_scope"}]
+end
+```
+
 ## Public API (MVP target)
 
 ```elixir
