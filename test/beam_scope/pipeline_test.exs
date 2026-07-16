@@ -9,7 +9,7 @@ defmodule BeamScope.PipelineTest do
   alias BeamScope.{ETS, ProcessSummary, Scheduler, VM}
 
   setup do
-    :ets.delete_all_objects(:beam_scope_cluster_state)
+    BeamScope.ClusterState.reset()
     :ok
   end
 

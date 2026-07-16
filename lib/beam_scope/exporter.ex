@@ -7,11 +7,14 @@ defmodule BeamScope.Exporter do
   never feed back into the model. BeamScope owns the runtime model; Prometheus,
   OpenTelemetry, and LiveDashboard **consume** it.
 
-  MVP exporters (`docs/ROADMAP.md`, Inc 4): Prometheus (via
-  `telemetry_metrics_prometheus`) and a dashboard (LiveDashboard page or a minimal
-  BeamScope LiveView). OpenTelemetry is "just another exporter" added right after.
+  The MVP exporters (`docs/ROADMAP.md`, Inc 4) are **pull**-based, so they use the
+  `render`/`Plug` seam instead of `export/1`: `BeamScope.Exporter.Prometheus` renders
+  the model to text exposition at scrape time and `BeamScope.Exporter.Dashboard`
+  renders a self-contained HTML page, both served by `BeamScope.Exporter.Router`.
 
-  > Not yet implemented — delivered in `docs/ROADMAP.md`, Inc 4.
+  `export/1` is the seam for **push**-based exporters (e.g. the post-MVP
+  OpenTelemetry exporter) that periodically emit the model downstream; it has no
+  implementations yet.
   """
 
   @doc """

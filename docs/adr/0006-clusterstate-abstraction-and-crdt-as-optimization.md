@@ -21,12 +21,17 @@ internal representation is private.**
 - **Public-ish surface (used by synchronization strategies and the query layer):**
 
   ```elixir
-  ClusterState.get(node)          # a node's current entity set
-  ClusterState.nodes()           # all nodes + liveness
-  ClusterState.put(node, entities, version)
-  ClusterState.merge(snapshot)   # apply a peer snapshot (LWW-per-node by version)
-  ClusterState.expire(now)       # sweep stale/expired nodes (ADR-0005 TTL)
+  ClusterState.get(node)            # a node's current ClusterNode (direct ETS read)
+  ClusterState.nodes()              # all nodes + liveness
+  ClusterState.put_local(entities)  # write local entities; version assigned internally
+  ClusterState.merge(snapshot)      # apply a peer snapshot (LWW-per-node by {incarnation, version})
+  ClusterState.expire(now, ttl)     # sweep stale/expired nodes (ADR-0005 TTL)
+  ClusterState.expire_node(node)    # expire one node promptly (e.g. on :nodedown)
   ```
+
+  Version assignment is deliberately *not* a caller concern (`put_local/1` rather than a
+  `put(node, entities, version)`): the monotonic local clock stays entirely inside the
+  abstraction, which is more encapsulated than exposing it.
 
 - **Default representation:** a versioned per-node map — `%{node => %{entities, version, observed_at,
   liveness}}` — held in an ETS table owned by a `ClusterState` process, with **last-observation-wins

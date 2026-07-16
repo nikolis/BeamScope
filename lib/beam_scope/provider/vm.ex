@@ -62,7 +62,7 @@ defmodule BeamScope.Provider.VM do
 
   Reads BEAM runtime stats and emits them as telemetry, which `aggregate/4` folds.
   """
-  @spec poll() :: :ok
+  @impl true
   def poll do
     :telemetry.execute(@memory, Map.new(:erlang.memory()), %{})
     :telemetry.execute(@run_queue, %{total: :erlang.statistics(:run_queue)}, %{})

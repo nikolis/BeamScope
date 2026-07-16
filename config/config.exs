@@ -12,8 +12,9 @@ import Config
 #       sync_interval: :timer.seconds(1),
 #       node_ttl: :timer.seconds(5)
 #
-# Domain providers and exporters follow the `enabled?/0` convention and are
-# feature-toggled per environment (docs/adr/0007, docs/adr/0008).
+# Domain providers and exporters are feature-toggled per environment via config:
+# providers through the `:providers` list (docs/adr/0008), the exporter endpoint
+# through the presence of `exporter: [port: ...]` (docs/adr/0007).
 
 config :beam_scope,
   sync: BeamScope.Synchronization.SnapshotGossip,

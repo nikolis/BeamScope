@@ -52,7 +52,7 @@ defmodule BeamScope.Integration.ClusterSyncTest do
     Application.put_env(:beam_scope, :sync_interval, 100)
     Application.put_env(:beam_scope, :node_ttl, 800)
 
-    :ets.delete_all_objects(:beam_scope_cluster_state)
+    BeamScope.ClusterState.reset()
     start_supervised!({Phoenix.PubSub, name: BeamScope.PubSub})
     start_supervised!(BeamScope.Aggregation.Supervisor)
     start_supervised!(BeamScope.Synchronization.SnapshotGossip)

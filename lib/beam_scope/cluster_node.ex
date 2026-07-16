@@ -4,7 +4,8 @@ defmodule BeamScope.ClusterNode do
 
   `entities` is a generic map of `domain_key => [entity_struct]`, so a new domain
   provider (ADR-0008) contributes to the model with **zero core change** — no named
-  field per domain. Inc 1 populates only `:vm`.
+  field per domain. The MVP providers populate `:vm`, `:scheduler`, `:processes`,
+  and `:ets`.
 
   The per-node logical clock is `{incarnation, version}` and is what synchronization
   merges on (ADR-0005/0006, last-observation-wins per node):
@@ -15,6 +16,15 @@ defmodule BeamScope.ClusterNode do
     * `version` — a monotonic counter bumped on every local write within an incarnation.
 
   `liveness` reflects heartbeat freshness: `:live` → `:stale` → `:expired`.
+
+  Two timestamps with distinct roles:
+
+    * `observed_at` — when the *owning* node took the observation (its wall clock).
+      **Display metadata only** (ADR-0005); never used for ordering or expiry.
+    * `received_at` — when the *local* replica stored this entry (stamped by
+      `BeamScope.ClusterState` on `put_local`/`merge`). The TTL sweep ages liveness
+      on this, so cross-node clock skew cannot corrupt expiry. Local-only: it is
+      re-stamped by each receiver and carries no meaning across nodes.
   """
 
   @type liveness :: :live | :stale | :expired
@@ -25,6 +35,7 @@ defmodule BeamScope.ClusterNode do
           incarnation: non_neg_integer(),
           version: non_neg_integer(),
           observed_at: integer() | nil,
+          received_at: integer() | nil,
           entities: %{optional(atom()) => [struct()]}
         }
 
@@ -33,5 +44,6 @@ defmodule BeamScope.ClusterNode do
             incarnation: 0,
             version: 0,
             observed_at: nil,
+            received_at: nil,
             entities: %{}
 end

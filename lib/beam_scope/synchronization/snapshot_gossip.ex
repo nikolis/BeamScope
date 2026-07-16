@@ -29,7 +29,10 @@ defmodule BeamScope.Synchronization.SnapshotGossip do
 
   @impl BeamScope.Synchronization
   def publish(%BeamScope.ClusterNode{} = snapshot) do
-    Phoenix.PubSub.broadcast(pubsub(), @topic, {:beam_scope_snapshot, snapshot})
+    # broadcast_from/4 skips delivery to the caller: on the periodic :publish tick the
+    # caller *is* the subscribed gossip server, so we avoid a pointless self-delivery.
+    # The node-name check in handle_info/2 stays as the guard for external callers.
+    Phoenix.PubSub.broadcast_from(pubsub(), self(), @topic, {:beam_scope_snapshot, snapshot})
   end
 
   def publish(nil), do: :ok

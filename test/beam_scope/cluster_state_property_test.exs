@@ -28,7 +28,7 @@ defmodule BeamScope.ClusterStatePropertyTest do
     end
   end
 
-  defp reset, do: :ets.delete_all_objects(:beam_scope_cluster_state)
+  defp reset, do: ClusterState.reset()
 
   # The clock each node should converge to: the max {incarnation, version} seen for it.
   defp expected_clocks(snapshots) do

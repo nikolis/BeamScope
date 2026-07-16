@@ -21,6 +21,7 @@ defmodule BeamScope.Provider.Processes do
   @impl true
   def sources, do: [@summary]
 
+  @impl true
   def poll do
     entries =
       for pid <- Process.list(),

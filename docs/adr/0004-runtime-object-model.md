@@ -30,8 +30,14 @@ MVP entities only:
 
 Cross-cutting rules:
 
-- **Every entity carries a monotonic `version` and an `observed_at` timestamp**, stamped by the
-  aggregation tick (ADR-0003). These are what synchronization merges on (ADR-0005/0006).
+- **The version clock lives on `ClusterNode`, not on each entity.** A node's entities are
+  unversioned payload inside its `ClusterNode`, which carries the `{incarnation, version}` logical
+  clock plus `observed_at`, stamped on every aggregation tick (ADR-0003). This is what
+  synchronization merges on (ADR-0005/0006) — per-entity clocks would be redundant because
+  snapshots are always full-node state and merges are per-node LWW. Note that each domain's
+  aggregator ticks independently, so a node's `version` advances once per domain per interval and
+  a gossiped snapshot may interleave domains from adjacent ticks — harmless for observations, but
+  worth knowing when reasoning about a snapshot's exact composition.
 - Entities are **plain structs** (data, not processes) so they are cheap to snapshot, serialize,
   merge, and diff.
 - Collections are **bounded** (top-N) so a struct's size cannot grow with workload.

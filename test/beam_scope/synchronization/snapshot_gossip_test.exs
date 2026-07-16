@@ -18,7 +18,7 @@ defmodule BeamScope.Synchronization.SnapshotGossipTest do
       Application.put_env(:beam_scope, :node_ttl, prev[:node_ttl])
     end)
 
-    :ets.delete_all_objects(:beam_scope_cluster_state)
+    ClusterState.reset()
     :ok
   end
 
@@ -26,7 +26,9 @@ defmodule BeamScope.Synchronization.SnapshotGossipTest do
     Phoenix.PubSub.subscribe(BeamScope.PubSub, @topic)
     snapshot = %ClusterNode{node: Kernel.node(), version: 3, entities: %{vm: [%VM{run_queue: 2}]}}
 
-    assert SnapshotGossip.publish(snapshot) == :ok
+    # publish/1 uses broadcast_from/4, which skips the calling process itself —
+    # publish from another process so this (subscribed) test process receives it.
+    assert Task.async(fn -> SnapshotGossip.publish(snapshot) end) |> Task.await() == :ok
     assert_receive {:beam_scope_snapshot, ^snapshot}
   end
 
@@ -71,18 +73,19 @@ defmodule BeamScope.Synchronization.SnapshotGossipTest do
     assert ClusterState.get(:peer@host).liveness == :expired
   end
 
-  test "the sweep timer ages a stale peer to :expired" do
+  test "the sweep timer ages an unheard-from peer to :expired" do
     ClusterState.merge(%ClusterNode{
       node: :peer@host,
       incarnation: 1,
       version: 1,
-      # already older than 2 * node_ttl (200ms) so the first sweep expires it
-      observed_at: System.system_time(:millisecond) - 1_000,
+      observed_at: System.system_time(:millisecond),
       entities: %{}
     })
 
     start_supervised!(SnapshotGossip)
 
+    # No further snapshots arrive for :peer@host, so its *receipt* age crosses
+    # 2 * node_ttl (2 x 200ms) and the sweep expires it.
     assert eventually(fn ->
              match?(%ClusterNode{liveness: :expired}, ClusterState.get(:peer@host))
            end)
