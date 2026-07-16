@@ -81,7 +81,7 @@ Per-node topology — every node is identical, no coordinator:
 | [0008](docs/adr/0008-domain-provider-plugin-architecture.md) | Domain-provider plugin architecture |
 | [0009](docs/adr/0009-public-api-surface.md) | Public API surface |
 
-Diagrams: [`docs/diagrams/`](docs/diagrams). Roadmap: [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Diagrams live under `docs/diagrams/`. Roadmap: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Public API (MVP target)
 

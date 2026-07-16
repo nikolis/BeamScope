@@ -86,11 +86,17 @@ Each increment is independently reviewable and leaves the project compiling and 
   text) and `GET /` (200, HTML dashboard) on port 9568. 38 tests green (`mix precommit`), incl.
   render, scrape-from-ClusterState, and `Plug.Test` router cases.
 
-### Inc 5 — Hardening
-- Property/merge tests for `ClusterState` (idempotent + commutative-per-node convergence).
-- Multi-node integration test (`libcluster` LocalEpmd, the `file_swarm` setup).
-- Benchmarks: snapshot size vs. cluster size, aggregation throughput/overhead, gossip cost per tick.
-- Docs, `@moduledoc`s, ExDoc.
+### Inc 5 — Hardening  ✅
+- **Property tests** (`stream_data`) for `ClusterState.merge/1` convergence: order-independent
+  convergence to the max `{incarnation, version}` per node, idempotence under replay, and
+  monotonic (never-regressing) clocks — the AP-safety guarantee of ADR-0005/0006.
+- **Multi-node integration test** (`test/beam_scope/integration/cluster_sync_test.exs`, tagged
+  `:distributed`, opt-in via `mix test --only distributed`): spins up a real peer with `:peer`,
+  boots BeamScope over `:erpc`, and asserts the MVP acceptance criteria end-to-end.
+- **Benchmarks** (`bench/`): `snapshot_size.exs` (per-node snapshot ≈ 0.65 KB compressed; state &
+  scrape O(N); gossip deliveries O(N²) — the ADR-0005 scaling limit) and `pipeline.exs` (VM
+  snapshot ≈ 0.4 µs, merge ≈ 2.6 µs, put_local ≈ 6.9 µs per op).
+- **Docs**: `mix docs` builds cleanly (ExDoc); every module carries a `@moduledoc`.
 
 ## MVP acceptance test — "the architecture is sound"
 
@@ -103,6 +109,10 @@ On a **2-node local cluster** (`libcluster` LocalEpmd):
    :expired`), then **recovers** when A rejoins (proving AP + expiry, ADR-0005).
 
 Passing this is the definition of done for v1 and the green light to add domains.
+
+> **Status: MVP complete (Inc 0–5).** This acceptance test is automated by the `:distributed`
+> integration test (`mix test --only distributed`) and was verified live on a 2-node cluster. The
+> architecture is sound; adding domains/exporters/sync-strategies is now purely additive.
 
 ## Post-MVP (roadmap only — not scheduled here)
 

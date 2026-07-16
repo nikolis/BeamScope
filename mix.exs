@@ -58,7 +58,9 @@ defmodule BeamScope.MixProject do
       {:plug, "~> 1.15", optional: true},
       {:bandit, "~> 1.5", optional: true},
 
-      # --- dev/docs ---
+      # --- dev/test/docs ---
+      {:stream_data, "~> 1.1", only: :test},
+      {:benchee, "~> 1.3", only: :dev},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]

@@ -57,8 +57,8 @@ BeamScope.ets(node)        # ETS: table count, memory, largest tables
   stringly-typed, reintroduces raw-counter thinking, and loses compile-time/structural clarity.
 - **Return plain maps instead of structs.** Rejected: weaker contract, no type documentation, easier
   to drift; structs are the model's whole point (ADR-0004).
-- **One `BeamScope.query/1` doing everything.** Rejected: discoverability and typing suffer versus a
-  handful of named, concept-specific functions.
+- **One catch-all query function doing everything** (`BeamScope.query(:vm, node)`). Rejected:
+  discoverability and typing suffer versus a handful of named, concept-specific functions.
 
 ## Failure modes & CAP
 
