@@ -15,19 +15,23 @@ defmodule BeamScope.Provider.ETS do
   alias BeamScope.ETS, as: ETSModel
 
   @summary [:ets, :summary]
-  @word_size :erlang.system_info(:wordsize)
 
   @impl true
   def sources, do: [@summary]
 
+  @impl true
   def poll do
+    # Read the word size at runtime (not compile time) so a build cross-compiled on a
+    # different word-size emulator still reports correct byte counts.
+    word_size = :erlang.system_info(:wordsize)
+
     tables =
       for tid <- :ets.all(),
           memory_words = :ets.info(tid, :memory),
           memory_words != :undefined do
         %{
           name: :ets.info(tid, :name),
-          memory_bytes: memory_words * @word_size,
+          memory_bytes: memory_words * word_size,
           size: safe_info(tid, :size)
         }
       end

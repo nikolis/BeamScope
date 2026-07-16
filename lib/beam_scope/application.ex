@@ -5,15 +5,15 @@ defmodule BeamScope.Application do
   BeamScope runs *inside* each node of a host BEAM cluster. Every node owns a full
   replica of the cluster runtime model; there is no central aggregator.
 
-  Foundational supervision tree (children are added per the roadmap in
-  `docs/ROADMAP.md`; this skeleton starts empty so the project compiles without
-  claiming to work):
+  Supervision tree (optional children start only when configured — see the private
+  helpers below):
 
       BeamScope.Supervisor  (:one_for_one)
       ├── BeamScope.ClusterState           # per-node replica of the runtime model
+      ├── Phoenix.PubSub                   # optional: standalone/dev only (start_pubsub: true)
       ├── BeamScope.Aggregation.Supervisor # per-DomainProvider local aggregators
-      ├── BeamScope.Synchronization         # configured sync strategy (default: snapshot gossip)
-      └── BeamScope.Exporters.Supervisor    # stateless exporter adapters (feature-toggled)
+      ├── <configured :sync strategy>      # default: BeamScope.Synchronization.SnapshotGossip
+      └── BeamScope.Exporters.Supervisor   # optional standalone HTTP endpoint for the exporters
   """
 
   use Application

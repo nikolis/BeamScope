@@ -22,19 +22,26 @@ integrations" into "a runtime observability platform with pluggable domain provi
 entities to the runtime object model.**
 
 ```elixir
-@callback sources() :: [ [atom()] | {:poller, mfa()} ]                       # telemetry / poller sources
+@callback sources() :: [[atom()]]                                            # telemetry events consumed
 @callback aggregate(event, measurements, metadata, acc :: term()) :: term()  # fold into local accumulator
 @callback snapshot(acc :: term()) :: [struct()]                              # emit runtime-model entities
+@callback setup() :: :ok                                                     # optional: one-time global setup
+@callback poll() :: :ok                                                      # optional: periodic measurement
 ```
 
-- A provider **declares its sources**; the framework attaches the telemetry handlers / registers the
-  `:telemetry_poller` measurements on its behalf. The provider never manages global wiring.
+- A provider **declares its contract**; the framework wires it on the provider's behalf: it
+  attaches telemetry handlers for `sources/0`, runs optional `setup/0` once before attaching
+  (e.g. enabling `:scheduler_wall_time`), and registers optional `poll/0` with the shared
+  `:telemetry_poller` (which emits measurements back through the provider's own telemetry
+  sources). The provider never manages global wiring.
 - `aggregate/4` runs on the **hot path** and must obey ADR-0003 (bounded, lock-free, minimal work).
 - `snapshot/1` runs on the **batching tick** and returns ADR-0004 model structs, which flow into
   `ClusterState` and synchronization.
-- Providers are **feature-toggled** (`enabled?/0`/config) and supervised under
-  `BeamScope.Aggregation.Supervisor` (with `rest_for_one` where a provider depends on shared setup,
-  matching the host convention). A provider crash is isolated to its own domain.
+- Providers are **feature-toggled via the config-driven list**
+  (`config :beam_scope, providers: [{provider, domain}, ...]`) and supervised under
+  `BeamScope.Aggregation.Supervisor`. A provider crash is isolated to its own domain, and the
+  aggregation tick re-attaches a telemetry handler that `:telemetry` detached after a raising
+  `aggregate/4`, so a hot-path fault degrades one domain briefly instead of silencing it.
 - **Framework-specific providers carry their deps as `optional`** so a plain library user pulls in
   nothing extra; the provider activates only when the target lib and its telemetry are present.
 - **MVP providers are framework-independent:** VM, Scheduler, Process, ETS — built solely on
@@ -64,7 +71,7 @@ entities to the runtime object model.**
 - **One giant provider with internal domain branches.** Rejected: destroys fault isolation, optional
   dependencies, and independent toggling.
 - **Compile-time-only plugins (no runtime toggle).** Rejected: operators need to enable/disable
-  domains per environment without recompiling (the host's `enabled?/0` convention).
+  domains per environment without recompiling (the config-driven `:providers` list).
 
 ## Failure modes & CAP
 

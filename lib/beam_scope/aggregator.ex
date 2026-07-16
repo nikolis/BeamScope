@@ -58,18 +58,13 @@ defmodule BeamScope.Aggregator do
     # Unique per instance: a crashed instance that skipped terminate/2 cannot block a
     # restarted instance from attaching (its own stale handler self-heals on next fire).
     handler_id = {__MODULE__, provider, make_ref()}
-    events = for source <- provider.sources(), is_list(source), do: source
 
-    :telemetry.attach_many(
-      handler_id,
-      events,
-      &__MODULE__.handle_event/4,
-      %{provider: provider, acc: acc}
-    )
+    state = %{provider: provider, domain: domain, acc: acc, handler_id: handler_id}
+    :ok = attach_handler(state)
 
     {:ok, timer} = :timer.send_interval(interval, :tick)
 
-    {:ok, %{provider: provider, domain: domain, acc: acc, handler_id: handler_id, timer: timer}}
+    {:ok, Map.put(state, :timer, timer)}
   end
 
   @doc false
@@ -81,6 +76,11 @@ defmodule BeamScope.Aggregator do
 
   @impl true
   def handle_info(:tick, state) do
+    # Self-heal (ADR-0008 fault isolation): if `aggregate/4` raised, :telemetry
+    # detached the handler in the *emitting* process — this GenServer never crashed,
+    # so no supervisor restart would recover the domain. Re-arm it every tick.
+    reattach_if_detached(state)
+
     entities = state.provider.snapshot(state.acc)
     ClusterState.put_local(%{state.domain => entities})
     {:noreply, state}
@@ -92,5 +92,23 @@ defmodule BeamScope.Aggregator do
   def terminate(_reason, state) do
     :telemetry.detach(state.handler_id)
     :ok
+  end
+
+  defp attach_handler(state) do
+    :telemetry.attach_many(
+      state.handler_id,
+      state.provider.sources(),
+      &__MODULE__.handle_event/4,
+      %{provider: state.provider, acc: state.acc}
+    )
+  end
+
+  defp reattach_if_detached(state) do
+    case attach_handler(state) do
+      # The handler was gone (a raising aggregate/4 got it detached) — re-armed.
+      :ok -> :ok
+      # Normal case: still attached.
+      {:error, :already_exists} -> :ok
+    end
   end
 end

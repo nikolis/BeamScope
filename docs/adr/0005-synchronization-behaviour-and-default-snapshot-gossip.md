@@ -105,6 +105,8 @@ worse than useless.
   it. No retransmission machinery is needed because snapshots are idempotent, versioned full-state
   summaries, not deltas that must all arrive.
 - **Clock skew:** merge ordering uses a **monotonic per-node version**, not wall-clock, so skew
-  cannot corrupt convergence; `observed_at` is display metadata only.
+  cannot corrupt convergence. Expiry is skew-safe too: the TTL sweep ages entries on
+  `received_at` — a timestamp the *local* replica stamps when it stores a snapshot — never on the
+  sender's clock. `observed_at` (the sender's wall clock) is display metadata only.
 - **Strategy process crash:** supervised restart re-subscribes; a brief snapshot gap heals on the
   next tick.

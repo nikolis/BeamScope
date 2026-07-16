@@ -9,7 +9,7 @@ defmodule BeamScope.Exporter.RouterTest do
   @opts Router.init([])
 
   setup do
-    :ets.delete_all_objects(:beam_scope_cluster_state)
+    ClusterState.reset()
     ClusterState.put_local(%{vm: [%VM{memory: %{total: 42}, run_queue: 0}]})
     :ok
   end

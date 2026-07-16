@@ -5,7 +5,7 @@ defmodule BeamScope.ClusterStateTest do
 
   setup do
     # ClusterState is started by the application; reset its table between tests.
-    :ets.delete_all_objects(:beam_scope_cluster_state)
+    ClusterState.reset()
     :ok
   end
 
@@ -85,19 +85,39 @@ defmodule BeamScope.ClusterStateTest do
   end
 
   describe "expire/2" do
-    test "ages a remote node :live -> :stale -> :expired by heartbeat age" do
-      now = System.system_time(:millisecond)
+    test "ages a remote node :live -> :stale -> :expired by receipt age" do
       ttl = 1_000
 
-      ClusterState.merge(%{remote(:b@host, 1) | observed_at: now - 500})
-      ClusterState.merge(%{remote(:c@host, 1) | observed_at: now - 1_500})
-      ClusterState.merge(%{remote(:d@host, 1) | observed_at: now - 3_000})
+      ClusterState.merge(remote(:b@host, 1))
+      %ClusterNode{received_at: received} = ClusterState.get(:b@host)
 
-      ClusterState.expire(now, ttl)
-
+      ClusterState.expire(received + 500, ttl)
       assert ClusterState.get(:b@host).liveness == :live
-      assert ClusterState.get(:c@host).liveness == :stale
-      assert ClusterState.get(:d@host).liveness == :expired
+
+      ClusterState.expire(received + 1_500, ttl)
+      assert ClusterState.get(:b@host).liveness == :stale
+
+      ClusterState.expire(received + 3_000, ttl)
+      assert ClusterState.get(:b@host).liveness == :expired
+    end
+
+    test "ignores the sender's wall clock: skewed observed_at cannot affect expiry" do
+      ttl = 1_000
+      now = System.system_time(:millisecond)
+
+      # Sender clocks skewed a minute ahead/behind — expiry must age on the local
+      # receipt time regardless (ADR-0005: observed_at is display metadata only).
+      ClusterState.merge(%{remote(:ahead@host, 1) | observed_at: now + 60_000})
+      ClusterState.merge(%{remote(:behind@host, 1) | observed_at: now - 60_000})
+      %ClusterNode{received_at: received} = ClusterState.get(:ahead@host)
+
+      ClusterState.expire(received + 500, ttl)
+      assert ClusterState.get(:ahead@host).liveness == :live
+      assert ClusterState.get(:behind@host).liveness == :live
+
+      ClusterState.expire(received + 3_000, ttl)
+      assert ClusterState.get(:ahead@host).liveness == :expired
+      assert ClusterState.get(:behind@host).liveness == :expired
     end
 
     test "never expires the local node" do

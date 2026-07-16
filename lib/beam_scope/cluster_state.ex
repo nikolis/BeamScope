@@ -67,12 +67,22 @@ defmodule BeamScope.ClusterState do
     GenServer.call(__MODULE__, {:expire, now, ttl})
   end
 
+  @doc false
+  # Test seam: clears the table through its owner (the table is `:protected`, so
+  # non-owner processes cannot write to it directly).
+  def reset do
+    GenServer.call(__MODULE__, :reset)
+  end
+
   # --- Server ---
 
   @impl true
   def init(_opts) do
+    # `:protected` keeps the representation private (ADR-0006): every write goes
+    # through this owning process, so nothing can bypass version assignment or the
+    # merge semantics; reads from any process stay direct and lock-free.
     table =
-      :ets.new(@table, [:named_table, :public, :set, read_concurrency: true])
+      :ets.new(@table, [:named_table, :protected, :set, read_concurrency: true])
 
     # The incarnation identifies this boot of the local node; it dominates any stale
     # pre-restart state a peer may still hold for us (ADR-0005 rejoin).
@@ -86,12 +96,15 @@ defmodule BeamScope.ClusterState do
 
     existing = get(local) || %ClusterNode{node: local}
 
+    now = System.system_time(:millisecond)
+
     cn = %ClusterNode{
       node: local,
       liveness: :live,
       incarnation: state.incarnation,
       version: version,
-      observed_at: System.system_time(:millisecond),
+      observed_at: now,
+      received_at: now,
       entities: Map.merge(existing.entities, entities)
     }
 
@@ -102,7 +115,11 @@ defmodule BeamScope.ClusterState do
   def handle_call({:merge, %ClusterNode{} = incoming}, _from, state) do
     result =
       if newer?(incoming, get(incoming.node)) do
-        :ets.insert(@table, {incoming.node, %{incoming | liveness: :live}})
+        # Stamp the *local* receipt time: the TTL sweep must never compare our clock
+        # against the sender's wall clock (`observed_at` is display metadata only —
+        # ADR-0005 clock-skew guarantee).
+        received = %{incoming | liveness: :live, received_at: System.system_time(:millisecond)}
+        :ets.insert(@table, {incoming.node, received})
         :merged
       else
         :ignored
@@ -119,6 +136,11 @@ defmodule BeamScope.ClusterState do
       end
     end
 
+    {:reply, :ok, state}
+  end
+
+  def handle_call(:reset, _from, state) do
+    :ets.delete_all_objects(@table)
     {:reply, :ok, state}
   end
 
@@ -140,12 +162,14 @@ defmodule BeamScope.ClusterState do
     {incoming.incarnation, incoming.version} > {stored.incarnation, stored.version}
   end
 
-  defp liveness_for(%ClusterNode{observed_at: nil}, _now, _ttl), do: :expired
+  # Liveness ages on `received_at` — a timestamp *this* node stamped on merge — so
+  # cross-node clock skew can never falsely expire a live peer or preserve a dead one.
+  defp liveness_for(%ClusterNode{received_at: nil}, _now, _ttl), do: :expired
 
-  defp liveness_for(%ClusterNode{observed_at: observed_at}, now, ttl) do
+  defp liveness_for(%ClusterNode{received_at: received_at}, now, ttl) do
     cond do
-      now - observed_at > 2 * ttl -> :expired
-      now - observed_at > ttl -> :stale
+      now - received_at > 2 * ttl -> :expired
+      now - received_at > ttl -> :stale
       true -> :live
     end
   end

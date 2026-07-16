@@ -28,6 +28,7 @@ defmodule BeamScope.Provider.Scheduler do
   @impl true
   def sources, do: [@wall_time]
 
+  @impl true
   def poll do
     :telemetry.execute(@wall_time, %{sample: :erlang.statistics(:scheduler_wall_time)}, %{})
     :ok

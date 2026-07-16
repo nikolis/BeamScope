@@ -26,7 +26,8 @@ emit it downstream, and never write back.**
   has **no side effects on the model** — it is a pure projection at the edge.
 - Exporters are **leaves**: they are the terminal pipeline stage and never feed the aggregation or
   synchronization layers.
-- Exporters are **feature-toggled** via the `enabled?/0`/config convention and supervised under
+- Exporters are **feature-toggled via config** (the standalone endpoint by the presence of
+  `config :beam_scope, exporter: [port: N]`) and supervised under
   `BeamScope.Exporters.Supervisor`; enabling or removing one cannot affect the model or other
   exporters.
 - **MVP exporters (Inc 4, implemented):**

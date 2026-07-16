@@ -50,7 +50,7 @@ defmodule BeamScope.Exporter.PrometheusTest do
   end
 
   test "scrape/0 renders the live ClusterState" do
-    :ets.delete_all_objects(:beam_scope_cluster_state)
+    ClusterState.reset()
     ClusterState.put_local(%{vm: [%VM{memory: %{total: 123}, run_queue: 0}]})
 
     text = Prometheus.scrape()
