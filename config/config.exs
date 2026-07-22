@@ -31,5 +31,18 @@ config :beam_scope,
 # enabling the global :scheduler_wall_time flag). Shape: [{provider_module, domain_atom}, ...].
 #
 #     config :beam_scope, providers: [{BeamScope.Provider.VM, :vm}]
+#
+# Framework providers are opt-in — set the FULL list (there is no config-merge helper).
+# To observe a Phoenix host's HTTP surface, add {BeamScope.Provider.Phoenix, :phoenix}:
+#
+#     config :beam_scope,
+#       providers: [
+#         {BeamScope.Provider.VM, :vm},
+#         {BeamScope.Provider.Scheduler, :scheduler},
+#         {BeamScope.Provider.Processes, :processes},
+#         {BeamScope.Provider.ETS, :ets},
+#         {BeamScope.Provider.Mailbox, :mailbox},
+#         {BeamScope.Provider.Phoenix, :phoenix}
+#       ]
 
 import_config "#{config_env()}.exs"

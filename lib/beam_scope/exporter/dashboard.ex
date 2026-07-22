@@ -32,7 +32,7 @@ defmodule BeamScope.Exporter.Dashboard do
       "</style></head><body>",
       "<h1>BeamScope <span class=\"sub\">cluster runtime model</span></h1>",
       "<table><thead><tr>",
-      th(~w(Node Liveness VM memory Run queue Uptime Sched util Processes ETS Mailbox Backlog)),
+      th(~w(Node Liveness VM memory Run queue Uptime Sched util Processes ETS Mailbox Backlog Phoenix)),
       "</tr></thead><tbody>",
       nodes |> Enum.sort_by(& &1.node) |> Enum.map(&row/1),
       "</tbody></table>",
@@ -50,6 +50,7 @@ defmodule BeamScope.Exporter.Dashboard do
     procs = first(node, :processes)
     ets = first(node, :ets)
     mailbox = first(node, :mailbox)
+    phoenix = first(node, :phoenix)
 
     [
       "<tr><td class=\"mono\">",
@@ -80,6 +81,16 @@ defmodule BeamScope.Exporter.Dashboard do
             Integer.to_string(mailbox.backlog_threshold)
           ]
       ),
+      td(
+        phoenix &&
+          [
+            Integer.to_string(phoenix.requests),
+            " req · ",
+            percent(phoenix.error_rate),
+            " err · ",
+            latency(phoenix.avg_latency_ms)
+          ]
+      ),
       "</tr>"
     ]
   end
@@ -104,6 +115,9 @@ defmodule BeamScope.Exporter.Dashboard do
 
   defp duration(ms) when is_integer(ms), do: [Integer.to_string(div(ms, 1000)), "s"]
   defp duration(_), do: "—"
+
+  defp latency(nil), do: "—"
+  defp latency(ms) when is_float(ms), do: [:erlang.float_to_binary(ms, decimals: 1), " ms"]
 
   defp first(%{entities: entities}, domain) do
     case Map.get(entities, domain) do

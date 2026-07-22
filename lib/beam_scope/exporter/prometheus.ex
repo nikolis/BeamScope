@@ -42,7 +42,23 @@ defmodule BeamScope.Exporter.Prometheus do
       {"beamscope_mailbox_backlogged",
        "Processes with a mailbox at or above the backlog threshold.", mailbox_backlogged(nodes)},
       {"beamscope_mailbox_distribution", "Process count by mailbox-length bucket.",
-       mailbox_distribution(nodes)}
+       mailbox_distribution(nodes)},
+      {"beamscope_phoenix_requests", "Phoenix HTTP requests in the last window.",
+       gauge(nodes, :phoenix, & &1.requests)},
+      {"beamscope_phoenix_errors", "Phoenix HTTP errors (5xx/exceptions) in the last window.",
+       gauge(nodes, :phoenix, & &1.errors)},
+      {"beamscope_phoenix_error_rate", "Phoenix HTTP error rate (0..1) in the last window.",
+       phoenix_error_rate(nodes)},
+      {"beamscope_phoenix_avg_latency_ms", "Phoenix average request latency (ms) in the window.",
+       phoenix_avg_latency(nodes)},
+      {"beamscope_phoenix_requests_total", "Phoenix HTTP requests since the node started.",
+       gauge(nodes, :phoenix, & &1.requests_total)},
+      {"beamscope_phoenix_errors_total", "Phoenix HTTP errors since the node started.",
+       gauge(nodes, :phoenix, & &1.errors_total)},
+      {"beamscope_phoenix_status", "Phoenix responses by status class in the last window.",
+       phoenix_status(nodes)},
+      {"beamscope_phoenix_latency", "Phoenix requests by latency bucket (ms) in the window.",
+       phoenix_latency(nodes)}
     ]
     |> Enum.map(fn {name, help, series} -> family(name, help, series) end)
   end
@@ -109,6 +125,44 @@ defmodule BeamScope.Exporter.Prometheus do
 
   defp mailbox_buckets(distribution) do
     for label <- ~w(0 1-9 10-99 100-999 1000+), do: {label, Map.get(distribution, label, 0)}
+  end
+
+  defp phoenix_error_rate(nodes) do
+    for n <- nodes,
+        p = first(n, :phoenix),
+        p != nil,
+        is_float(p.error_rate),
+        do: {[node: n.node], p.error_rate}
+  end
+
+  defp phoenix_avg_latency(nodes) do
+    for n <- nodes,
+        p = first(n, :phoenix),
+        p != nil,
+        is_float(p.avg_latency_ms),
+        do: {[node: n.node], p.avg_latency_ms}
+  end
+
+  defp phoenix_status(nodes) do
+    for n <- nodes,
+        p = first(n, :phoenix),
+        p != nil,
+        {class, count} <- Enum.sort(p.status_classes),
+        is_number(count),
+        do: {[node: n.node, class: class], count}
+  end
+
+  defp phoenix_latency(nodes) do
+    for n <- nodes,
+        p = first(n, :phoenix),
+        p != nil,
+        {label, count} <- phoenix_latency_buckets(p.latency_distribution),
+        is_number(count),
+        do: {[node: n.node, bucket: label], count}
+  end
+
+  defp phoenix_latency_buckets(distribution) do
+    for label <- ~w(0-10 10-50 50-200 200-1000 1000+), do: {label, Map.get(distribution, label, 0)}
   end
 
   # Generic single-gauge series for an entity field.

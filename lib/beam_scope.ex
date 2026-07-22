@@ -25,6 +25,8 @@ defmodule BeamScope do
 
   The full MVP surface — `cluster/0`, `nodes/0`, `node/1`, `vm/1`, `schedulers/1`,
   `processes/1`, `ets/1`, `mailbox/1` — is implemented as of Inc 3 (`docs/ROADMAP.md`).
+  Framework providers add their own accessor as they land (`phoenix/1` for the Phoenix
+  HTTP surface), keeping the surface additive (ADR-0009).
   """
 
   alias BeamScope.{ClusterNode, ClusterState}
@@ -65,6 +67,13 @@ defmodule BeamScope do
   @doc "Mailbox model (queue totals, distribution, backlog) for a node, or `nil` if unknown."
   @spec mailbox(node_name()) :: BeamScope.Mailbox.t() | nil
   def mailbox(the_node), do: entity(the_node, :mailbox)
+
+  @doc """
+  Phoenix HTTP model (windowed request/error rates, latency, status classes) for a node,
+  or `nil` if unknown. Requires the opt-in `BeamScope.Provider.Phoenix` provider.
+  """
+  @spec phoenix(node_name()) :: BeamScope.Phoenix.t() | nil
+  def phoenix(the_node), do: entity(the_node, :phoenix)
 
   # Domains are stored as `domain => [entity]`. The MVP domains are all singletons —
   # return the first (only) entity, if present.

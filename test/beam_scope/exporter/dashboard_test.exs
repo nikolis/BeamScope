@@ -1,7 +1,7 @@
 defmodule BeamScope.Exporter.DashboardTest do
   use ExUnit.Case, async: true
 
-  alias BeamScope.{ClusterNode, Mailbox, ProcessSummary, VM}
+  alias BeamScope.{ClusterNode, Mailbox, Phoenix, ProcessSummary, VM}
   alias BeamScope.Exporter.Dashboard
 
   test "render/1 builds an HTML page with a row per node" do
@@ -20,7 +20,8 @@ defmodule BeamScope.Exporter.DashboardTest do
               backlog_threshold: 1000,
               distribution: %{"0" => 5, "1-9" => 3, "10-99" => 1, "100-999" => 0, "1000+" => 1}
             }
-          ]
+          ],
+          phoenix: [%Phoenix{requests: 128, error_rate: 0.05, avg_latency_ms: 12.5}]
         }
       },
       %ClusterNode{node: :b@h, liveness: :expired, entities: %{}}
@@ -37,6 +38,9 @@ defmodule BeamScope.Exporter.DashboardTest do
     # mailbox column renders queued totals and the backlog threshold marker
     assert html =~ "queued"
     assert html =~ "≥ 1000"
+    # phoenix column renders windowed requests, error rate, and average latency
+    assert html =~ "128 req"
+    assert html =~ "12.5 ms"
     # a node without a VM entity renders an em dash rather than crashing
     assert html =~ "—"
   end
