@@ -6,7 +6,7 @@ defmodule BeamScope.PipelineTest do
   """
   use ExUnit.Case, async: false
 
-  alias BeamScope.{ETS, ProcessSummary, Scheduler, VM}
+  alias BeamScope.{ETS, Mailbox, ProcessSummary, Scheduler, VM}
 
   setup do
     BeamScope.ClusterState.reset()
@@ -43,7 +43,7 @@ defmodule BeamScope.PipelineTest do
     assert v2 > v1
   end
 
-  test "all four MVP domains populate through the pipeline (Inc 3)" do
+  test "all MVP domains populate through the pipeline (Inc 3)" do
     start_supervised!(BeamScope.Aggregation.Supervisor)
 
     # Scheduler: counts appear immediately; utilization needs a second sample.
@@ -84,6 +84,20 @@ defmodule BeamScope.PipelineTest do
 
     assert %ETS{} = ets
     assert ets.table_count > 0 and ets.memory_bytes > 0
+
+    # Mailbox: wait for the first real scan (distribution populated by a poll).
+    mailbox =
+      eventually(fn ->
+        case BeamScope.mailbox(Kernel.node()) do
+          %Mailbox{backlog_threshold: t} = m when t > 0 -> m
+          _ -> nil
+        end
+      end)
+
+    assert %Mailbox{} = mailbox
+    assert mailbox.total_queued >= 0
+    assert mailbox.backlog_threshold > 0
+    assert map_size(mailbox.distribution) == 5
   end
 
   # Poll a function until it returns a truthy value, or fail after ~2s.

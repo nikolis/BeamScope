@@ -32,7 +32,7 @@ defmodule BeamScope.Exporter.Dashboard do
       "</style></head><body>",
       "<h1>BeamScope <span class=\"sub\">cluster runtime model</span></h1>",
       "<table><thead><tr>",
-      th(~w(Node Liveness VM memory Run queue Uptime Sched util Processes ETS)),
+      th(~w(Node Liveness VM memory Run queue Uptime Sched util Processes ETS Mailbox Backlog)),
       "</tr></thead><tbody>",
       nodes |> Enum.sort_by(& &1.node) |> Enum.map(&row/1),
       "</tbody></table>",
@@ -49,6 +49,7 @@ defmodule BeamScope.Exporter.Dashboard do
     sched = first(node, :scheduler)
     procs = first(node, :processes)
     ets = first(node, :ets)
+    mailbox = first(node, :mailbox)
 
     [
       "<tr><td class=\"mono\">",
@@ -63,6 +64,22 @@ defmodule BeamScope.Exporter.Dashboard do
       td(sched && percent(sched.utilization)),
       td(procs && [Integer.to_string(procs.count), " / ", Integer.to_string(procs.limit)]),
       td(ets && [Integer.to_string(ets.table_count), " · ", mb(ets.memory_bytes)]),
+      td(
+        mailbox &&
+          [
+            Integer.to_string(mailbox.total_queued),
+            " queued · max ",
+            Integer.to_string(mailbox.max_queued)
+          ]
+      ),
+      td(
+        mailbox &&
+          [
+            Integer.to_string(mailbox.backlogged),
+            " ≥ ",
+            Integer.to_string(mailbox.backlog_threshold)
+          ]
+      ),
       "</tr>"
     ]
   end

@@ -24,7 +24,7 @@ defmodule BeamScope do
   local `BeamScope.ClusterState` replica — local and fast, never a cross-node call.
 
   The full MVP surface — `cluster/0`, `nodes/0`, `node/1`, `vm/1`, `schedulers/1`,
-  `processes/1`, `ets/1` — is implemented as of Inc 3 (`docs/ROADMAP.md`).
+  `processes/1`, `ets/1`, `mailbox/1` — is implemented as of Inc 3 (`docs/ROADMAP.md`).
   """
 
   alias BeamScope.{ClusterNode, ClusterState}
@@ -61,6 +61,10 @@ defmodule BeamScope do
   @doc "ETS model (table count, memory, largest tables) for a node, or `nil` if unknown."
   @spec ets(node_name()) :: BeamScope.ETS.t() | nil
   def ets(the_node), do: entity(the_node, :ets)
+
+  @doc "Mailbox model (queue totals, distribution, backlog) for a node, or `nil` if unknown."
+  @spec mailbox(node_name()) :: BeamScope.Mailbox.t() | nil
+  def mailbox(the_node), do: entity(the_node, :mailbox)
 
   # Domains are stored as `domain => [entity]`. The MVP domains are all singletons —
   # return the first (only) entity, if present.

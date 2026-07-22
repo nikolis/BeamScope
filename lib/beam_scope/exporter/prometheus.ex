@@ -34,7 +34,15 @@ defmodule BeamScope.Exporter.Prometheus do
       {"beamscope_process_count", "Current process count.", process_count(nodes)},
       {"beamscope_process_limit", "Maximum process count.", process_limit(nodes)},
       {"beamscope_ets_table_count", "Number of ETS tables.", ets_table_count(nodes)},
-      {"beamscope_ets_memory_bytes", "ETS memory in bytes.", ets_memory(nodes)}
+      {"beamscope_ets_memory_bytes", "ETS memory in bytes.", ets_memory(nodes)},
+      {"beamscope_mailbox_total_queued", "Total queued messages across all process mailboxes.",
+       mailbox_total_queued(nodes)},
+      {"beamscope_mailbox_max_queued", "Largest single process mailbox length.",
+       mailbox_max_queued(nodes)},
+      {"beamscope_mailbox_backlogged",
+       "Processes with a mailbox at or above the backlog threshold.", mailbox_backlogged(nodes)},
+      {"beamscope_mailbox_distribution", "Process count by mailbox-length bucket.",
+       mailbox_distribution(nodes)}
     ]
     |> Enum.map(fn {name, help, series} -> family(name, help, series) end)
   end
@@ -78,6 +86,29 @@ defmodule BeamScope.Exporter.Prometheus do
         s != nil,
         is_float(s.utilization),
         do: {[node: n.node], s.utilization}
+  end
+
+  defp mailbox_total_queued(nodes), do: gauge(nodes, :mailbox, & &1.total_queued)
+  defp mailbox_max_queued(nodes), do: gauge(nodes, :mailbox, & &1.max_queued)
+
+  defp mailbox_backlogged(nodes) do
+    for n <- nodes,
+        m = first(n, :mailbox),
+        m != nil,
+        do: {[node: n.node, threshold: m.backlog_threshold], m.backlogged}
+  end
+
+  defp mailbox_distribution(nodes) do
+    for n <- nodes,
+        m = first(n, :mailbox),
+        m != nil,
+        {label, count} <- mailbox_buckets(m.distribution),
+        is_number(count),
+        do: {[node: n.node, bucket: label], count}
+  end
+
+  defp mailbox_buckets(distribution) do
+    for label <- ~w(0 1-9 10-99 100-999 1000+), do: {label, Map.get(distribution, label, 0)}
   end
 
   # Generic single-gauge series for an entity field.

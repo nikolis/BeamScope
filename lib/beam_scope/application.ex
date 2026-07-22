@@ -20,6 +20,8 @@ defmodule BeamScope.Application do
 
   @impl true
   def start(_type, _args) do
+    # BeamScope.Aggregation.Supervisor 
+    # BeamScope.Synchronization.SnapshotGossip
     children =
       [
         # Owns the per-node replica of the cluster model; must start first — everything
@@ -27,13 +29,12 @@ defmodule BeamScope.Application do
         BeamScope.ClusterState
       ] ++
         pubsub_children() ++
-        aggregation_children() ++ #BeamScope.Aggregation.Supervisor 
-        sync_children() ++ #BeamScope.Synchronization.SnapshotGossip
+        aggregation_children() ++
+        sync_children() ++
         [BeamScope.Exporters.Supervisor]
 
     Supervisor.start_link(children, strategy: :one_for_one, name: BeamScope.Supervisor)
   end
-
 
   # Local aggregation is toggleable so tests can drive `ClusterState` deterministically
   # (see config/test.exs).

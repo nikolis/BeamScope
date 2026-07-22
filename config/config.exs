@@ -21,11 +21,14 @@ config :beam_scope,
   sync_interval: :timer.seconds(1),
   node_ttl: :timer.seconds(5),
   # Top-N bound for the Process/ETS providers (largest mailboxes/memory/tables).
-  top_n: 5
+  top_n: 5,
+  # Backlog threshold for the Mailbox provider: processes with a mailbox this long or
+  # longer are counted as backlogged.
+  mailbox_backlog_threshold: 1000
 
-# Enabled domain providers (ADR-0008). Defaults to VM + Scheduler + Processes + ETS;
-# override to add framework providers or drop heavier ones (e.g. to avoid enabling the
-# global :scheduler_wall_time flag). Shape: [{provider_module, domain_atom}, ...].
+# Enabled domain providers (ADR-0008). Defaults to VM + Scheduler + Processes + ETS +
+# Mailbox; override to add framework providers or drop heavier ones (e.g. to avoid
+# enabling the global :scheduler_wall_time flag). Shape: [{provider_module, domain_atom}, ...].
 #
 #     config :beam_scope, providers: [{BeamScope.Provider.VM, :vm}]
 

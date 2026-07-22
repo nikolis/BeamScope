@@ -191,3 +191,31 @@ telemetry are present.
 - **Lower-level `ClusterState` accessor** — a deliberate, additive escape hatch for power users'
   ad-hoc queries beyond the curated, concept-oriented `BeamScope` surface (ADR-0009), without
   turning the API stringly-typed.
+
+## TODO — possible optimizations (premature for now)
+
+Ideas that would trade some clarity or a clean seam for performance we have **not yet measured a
+need for**. Recorded here so the option isn't lost, but deliberately **not** acted on: the MVP scan
+cost is bounded and cheap on typical nodes, and Inc 5's benchmarks did not flag it. Revisit only if
+profiling on a large node shows the process walk actually hurts.
+
+### Shared process-table scan for `Processes` + `Mailbox` (ADR-0008)
+
+Today `BeamScope.Provider.Processes` and `BeamScope.Provider.Mailbox` are each registered
+independently on the shared `:telemetry_poller`, so every tick walks `Process.list/0` **twice** —
+once for per-process top-N (mailbox/memory/name), once for the aggregate mailbox distribution — and
+reads `:message_queue_len` on every process in both passes. On a large node that is two O(process
+count) scans per interval where one would do.
+
+The tempting fix is to have `Mailbox` reuse the `Processes` scan — but **not** by one provider
+calling into the other. That would couple two independent plugins, break the ADR-0008 invariant
+that each domain is enable/disable-independent on the `:providers` list (Mailbox would silently go
+stale if `Processes` were removed), and share mutable scan state the `DomainProvider` behaviour
+gives no primitive for.
+
+If consolidation is ever justified, the idiomatic shape is a **shared scan *source***: a single
+poller walks `Process.list/0` once, emits one `[:process, :scan]` telemetry event carrying the
+per-process info, and both providers keep their independent `aggregate/4`/`snapshot/1` and fold
+that event (neither owns `poll/0` anymore). That yields one scan, one consistent population
+snapshot (the two scans today observe slightly different populations), and keeps the providers
+decoupled. Natural home is alongside any future sampling/large-node work.
