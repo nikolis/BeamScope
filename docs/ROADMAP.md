@@ -116,11 +116,78 @@ Passing this is the definition of done for v1 and the green light to add domains
 
 ## Post-MVP (roadmap only — not scheduled here)
 
-Each is *additive*, requiring **no core change** — the payoff of the architecture:
+Each item below is *additive*, requiring **no core change** — that is the payoff of the
+architecture, and the reason this section is a **menu, not a timeline**. Items are grouped by the
+pipeline stage they extend and are deliberately **unordered**: a team pulls in whichever fit its
+deployment (a 3-node app and a 200-node fleet want different things), and each lands behind an
+existing behaviour or the config-driven plugin list. Where an item is large enough to deserve its
+own ADR, that is noted inline rather than pre-authored here.
 
-- **OpenTelemetry exporter** — "just another exporter" (ADR-0007).
-- **Delta-CRDT synchronization strategy** and/or CRDT-backed `ClusterState` fields (membership,
-  presence) behind the abstraction (ADR-0005/0006).
-- **Sidecar / remote-observer topology** as an alternative strategy (ADR-0002).
-- **Framework domain providers:** Phoenix, LiveView, Presence, Oban, Broadway, custom metrics
-  (ADR-0008), each with optional deps and runtime presence detection.
+### Exporters (ADR-0007)
+
+Exporters are stateless leaves that read `ClusterState` and project it downstream; adding one is
+"implement `export/1` (or a `render/1`/`Plug` seam), toggle it on."
+
+- **OpenTelemetry exporter** — the canonical "just another exporter" (ADR-0007): maps the runtime
+  object model to OTLP and ships it. This is a **push** exporter, so it uses the streaming wiring
+  around `export/1` rather than the Prometheus/dashboard **pull** (`render/1`) seam — the
+  per-exporter difference ADR-0007 already anticipates. No core change; the strongest validation
+  that the exporter boundary is right.
+- **LiveDashboard / LiveView page** — a Phoenix LiveView exporter as a richer alternative to the
+  dependency-free HTML dashboard, carrying Phoenix/LiveView as **optional** deps so plain library
+  users pull in nothing. ADR-0007 explicitly keeps this as a "natural future exporter — just
+  another adapter."
+
+### Synchronization strategies (ADR-0005/0006)
+
+The synchronization algorithm is a replaceable strategy behind `BeamScope.Synchronization`,
+selected via `config :beam_scope, sync:`; every strategy converges purely through
+`ClusterState.merge/expire`. Two distinct axes live here — swapping the *strategy*, and changing
+how a *field* converges inside `ClusterState`:
+
+- **Delta-CRDT synchronization strategy** — an alternative `Synchronization` implementation over
+  `delta_crdt`, replacing snapshot gossip wholesale for deployments that prefer it. Retained by
+  ADR-0005 as a legitimate strategy — just not the default or the core.
+- **CRDT-backed `ClusterState` fields** — *distinct from the above*: backing a **specific** aggregate
+  (OR-set cluster membership, presence-like sets, a genuinely additive cluster-wide counter, an LWW
+  map) with a delta-CRDT *inside* `ClusterState`, while the default per-node LWW covers everything
+  else. Callers still go through the `ClusterState` API and never see a CRDT (ADR-0006). Opt-in and
+  localized to the handful of fields that benefit.
+- **Gossip scaling mitigations** — partial gossip, fan-out trees, or digest diffing to relax the
+  naive `O(nodes²)`-per-tick full-mesh broadcast (ADR-0005) for large fleets. These are future
+  *strategies* (or refinements of the default), not core changes — the whole point of the behaviour.
+- **Other strategies** — `:erpc`/RPC pull, `Ra`, or NATS, each viable behind the same behaviour as
+  ADR-0005's alternatives note (RPC pull is also the natural fit for the sidecar topology below).
+
+### Domain providers (ADR-0008)
+
+Each runtime domain is a `BeamScope.DomainProvider` plugin on the config-driven `:providers` list;
+adding one is three callbacks plus a registration, with **zero core change**. Framework-specific
+providers carry their deps as **optional** and activate only when the target library and its
+telemetry are present.
+
+- **Mailbox** domain — the remaining framework-independent domain from the 13-domain vision
+  (ADR-0004/0008), distinct from `ProcessSummary`, built solely on runtime introspection.
+- **Framework providers** — Phoenix, LiveView, Presence, Oban, Broadway, and custom metrics. Each
+  contributes its own struct(s) to the model, adds its own additive `BeamScope.<domain>(node)`
+  accessor (ADR-0009), and is fault-isolated to its own domain's snapshots.
+
+### Deployment topology (ADR-0002)
+
+- **Sidecar / remote-observer topology** — a separate BeamScope node observing a target cluster over
+  `:erpc`, rather than the default embedded library. Expressible as an alternative synchronization
+  strategy plus a remote-collection provider *without changing the core* — valuable for hard
+  isolation or polyglot clusters. Deferred by ADR-0002 as a future shape, not the default.
+
+### Scaling & hardening (ADR-0002/0003)
+
+- **Provider back-pressure & isolation** — bounding a badly-behaved provider's competition for the
+  host's schedulers/memory, the first-class concern ADR-0002/0003 flag for an embedded observer.
+  Builds on the existing bounded, lock-free aggregation (top-N, fixed cardinality) and per-domain
+  supervision rather than replacing them.
+
+### Public API (ADR-0009)
+
+- **Lower-level `ClusterState` accessor** — a deliberate, additive escape hatch for power users'
+  ad-hoc queries beyond the curated, concept-oriented `BeamScope` surface (ADR-0009), without
+  turning the API stringly-typed.
