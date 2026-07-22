@@ -32,10 +32,13 @@ defmodule BeamScope.Exporter.Dashboard do
       "</style></head><body>",
       "<h1>BeamScope <span class=\"sub\">cluster runtime model</span></h1>",
       "<table><thead><tr>",
-      th(~w(Node Liveness VM memory Run queue Uptime Sched util Processes ETS Mailbox Backlog Phoenix)),
+      th(
+        ~w(Node Liveness VM memory Run queue Uptime Sched util Processes ETS Mailbox Backlog Phoenix)
+      ),
       "</tr></thead><tbody>",
       nodes |> Enum.sort_by(& &1.node) |> Enum.map(&row/1),
       "</tbody></table>",
+      notable_section(nodes),
       "<p class=\"foot\">",
       Integer.to_string(length(nodes)),
       " node(s) · refreshes every ",
@@ -84,16 +87,105 @@ defmodule BeamScope.Exporter.Dashboard do
       td(
         phoenix &&
           [
-            Integer.to_string(phoenix.requests),
+            Integer.to_string(phoenix.requests_total),
             " req · ",
-            percent(phoenix.error_rate),
+            Integer.to_string(phoenix.errors_total),
             " err · ",
+            percent(phoenix.error_rate),
+            " err rate · ",
             latency(phoenix.avg_latency_ms)
           ]
       ),
       "</tr>"
     ]
   end
+
+  # Fleet-wide "notable requests" sample (ADR-0010), composed at read time: each node carries
+  # only its own bounded top-N, so a cluster-wide view is produced here by concatenating every
+  # node's list, re-sorting, and taking the top-N — never by a special merge in ClusterState
+  # (Rule 5). The composed set is eventually-consistent and may differ between viewers.
+  defp notable_section(nodes) do
+    slow =
+      nodes
+      |> compose(:top_slow)
+      |> Enum.sort_by(fn {_node, r} -> r.latency_ms end, :desc)
+      |> Enum.take(top_n())
+
+    errs =
+      nodes
+      |> compose(:recent_5xx)
+      |> Enum.sort_by(fn {_node, r} -> r.at end, :desc)
+      |> Enum.take(top_n())
+
+    if slow == [] and errs == [] do
+      []
+    else
+      [
+        "<h2>Notable requests <span class=\"sub\">bounded sample · fleet-wide</span></h2>",
+        "<div class=\"notable\">",
+        notable_table("Slowest requests", ~w(Node Route Status Latency), slow, &slow_row/1),
+        notable_table("Recent 5xx", ~w(Node Route Status Latency When), errs, &err_row/1),
+        "</div>"
+      ]
+    end
+  end
+
+  defp compose(nodes, field) do
+    for node <- nodes,
+        p = first(node, :phoenix),
+        p != nil,
+        r <- Map.fetch!(p, field),
+        do: {node.node, r}
+  end
+
+  defp notable_table(_title, _headers, [], _row_fun), do: []
+
+  defp notable_table(title, headers, rows, row_fun) do
+    [
+      "<div><h3>",
+      esc(title),
+      "</h3><table><thead><tr>",
+      th(headers),
+      "</tr></thead><tbody>",
+      Enum.map(rows, row_fun),
+      "</tbody></table></div>"
+    ]
+  end
+
+  defp slow_row({node, r}) do
+    [
+      "<tr><td class=\"mono\">",
+      esc(to_string(node)),
+      "</td><td class=\"mono\">",
+      esc(r.route),
+      "</td>",
+      td(r.status && Integer.to_string(r.status)),
+      td([Integer.to_string(r.latency_ms), " ms"]),
+      "</tr>"
+    ]
+  end
+
+  defp err_row({node, r}) do
+    [
+      "<tr><td class=\"mono\">",
+      esc(to_string(node)),
+      "</td><td class=\"mono\">",
+      esc(r.route),
+      "</td>",
+      td(r.status && Integer.to_string(r.status)),
+      td([Integer.to_string(r.latency_ms), " ms"]),
+      td(clock(r.at)),
+      "</tr>"
+    ]
+  end
+
+  defp clock(at) when is_integer(at) and at > 0 do
+    at |> DateTime.from_unix!(:millisecond) |> Calendar.strftime("%H:%M:%S")
+  end
+
+  defp clock(_), do: nil
+
+  defp top_n, do: Application.get_env(:beam_scope, :top_n, 5)
 
   defp liveness_badge(liveness) do
     ["<span class=\"badge ", Atom.to_string(liveness), "\">", Atom.to_string(liveness), "</span>"]
@@ -138,6 +230,9 @@ defmodule BeamScope.Exporter.Dashboard do
     """
     body{font:14px/1.5 system-ui,sans-serif;margin:2rem;color:#1a1a1a;background:#fafafa}
     h1{font-size:1.4rem;margin:0 0 1rem}.sub{color:#888;font-weight:400;font-size:1rem}
+    h2{font-size:1.1rem;margin:1.75rem 0 .5rem}
+    h3{font-size:.85rem;margin:.75rem 0 .35rem;color:#555;text-transform:uppercase;letter-spacing:.03em}
+    .notable{display:flex;gap:1.5rem;flex-wrap:wrap}.notable>div{flex:1;min-width:320px}
     table{border-collapse:collapse;width:100%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.1)}
     th,td{padding:.5rem .75rem;text-align:left;border-bottom:1px solid #eee}
     th{background:#f4f4f5;font-size:.8rem;text-transform:uppercase;letter-spacing:.03em;color:#666}
@@ -148,7 +243,7 @@ defmodule BeamScope.Exporter.Dashboard do
     .foot{color:#999;margin-top:1rem;font-size:.85rem}
     @media(prefers-color-scheme:dark){body{background:#18181b;color:#e4e4e7}
     table{background:#27272a;box-shadow:none}th{background:#3f3f46;color:#a1a1aa}
-    th,td{border-color:#3f3f46}.sub,.foot{color:#71717a}}
+    th,td{border-color:#3f3f46}.sub,.foot,h3{color:#71717a}}
     """
   end
 end

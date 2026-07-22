@@ -2,7 +2,8 @@
 
 - **Status:** Accepted — 2026-07-15
 - **Deciders:** Project architect
-- **Related:** ADR-0003 (aggregation), ADR-0004 (model), ADR-0007 (exporters)
+- **Related:** ADR-0003 (aggregation), ADR-0004 (model), ADR-0007 (exporters),
+  ADR-0010 (bounded notable requests)
 
 ## Context
 

@@ -9,8 +9,9 @@ defmodule BeamScope.Provider.Scheduler do
   emulator).
 
   `setup/0` enables the global `:scheduler_wall_time` flag once. It carries a small,
-  always-on runtime cost; drop this provider from `config :beam_scope, :providers` to
-  avoid it.
+  always-on runtime cost. This is a core default provider (`BeamScope.Aggregation.Supervisor`),
+  and `config :beam_scope, :providers` only *adds* providers; to avoid the flag entirely,
+  remove this entry from `@default_providers`.
   """
 
   @behaviour BeamScope.DomainProvider

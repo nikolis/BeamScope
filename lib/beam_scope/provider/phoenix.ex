@@ -21,6 +21,14 @@ defmodule BeamScope.Provider.Phoenix do
   exposes per-node monotonic `requests_total`/`errors_total` (like `BeamScope.VM.uptime_ms`)
   so Prometheus `rate()` has a counter to work on.
 
+  It also samples **notable requests** (ADR-0010): bounded `top_slow` / `recent_5xx` lists on
+  the entity. The hot path stays lock-free — only a *slow* (≥ `:phoenix_slow_floor_ms`, default
+  50) or *error* request builds a thin `BeamScope.Phoenix.NotableRequest` and writes it to a
+  fixed-size ring keyed by an atomic cursor (a distinct index per concurrent writer, one insert
+  to its own slot), so no request corrupts another; the fast majority pays nothing extra.
+  `snapshot/1` ranks each ring and clears its slots per window. The lists are a **lossy sample**,
+  not an audit log, and route **templates** only ever leave the node — never concrete paths.
+
   Framework provider, opt-in: add `{BeamScope.Provider.Phoenix, :phoenix}` to
   `config :beam_scope, :providers`. On the first tick, `:prev` is absent (zeros), so the
   first window reports activity since the aggregator started; negligible on a fresh node.
@@ -29,6 +37,7 @@ defmodule BeamScope.Provider.Phoenix do
   @behaviour BeamScope.DomainProvider
 
   alias BeamScope.Phoenix, as: PhoenixModel
+  alias BeamScope.Phoenix.NotableRequest
 
   @stop [:phoenix, :endpoint, :stop]
   @exception [:phoenix, :endpoint, :exception]
@@ -36,20 +45,24 @@ defmodule BeamScope.Provider.Phoenix do
   @latency_buckets ~w(0-10 10-50 50-200 200-1000 1000+)
   @status_classes ~w(2xx 3xx 4xx 5xx)
 
+  # Route template used whenever the real one can't be resolved (ADR-0010 Rule 2: never a
+  # concrete path). See `route_template/1`.
+  @unmatched "(unmatched)"
+
   @impl true
   def sources, do: [@stop, @exception]
 
   @impl true
   def aggregate(@stop, measurements, metadata, acc) do
     status = status_of(metadata)
-    record(acc, duration_of(measurements), status, server_error?(status))
+    record(acc, duration_of(measurements), status, server_error?(status), metadata)
     acc
   end
 
   def aggregate(@exception, measurements, metadata, acc) do
     # An uncaught error emits :exception (never :stop), so it is always an error; if the
     # conn didn't carry a status, attribute it to 5xx.
-    record(acc, duration_of(measurements), status_of(metadata) || 500, true)
+    record(acc, duration_of(measurements), status_of(metadata) || 500, true, metadata)
     acc
   end
 
@@ -60,6 +73,14 @@ defmodule BeamScope.Provider.Phoenix do
     current = read_cumulative(acc)
     prev = ets_get(acc, :prev, zeroed_cumulative())
     :ets.insert(acc, {:prev, current})
+
+    # Bounded notable-request samples (ADR-0010): rank each ring's pool and take the top-N,
+    # then clear the slots so the next window starts empty (the analog of the :prev swap).
+    # The cursors stay monotonic — `rem/2` wraps them naturally.
+    top_slow = read_ring(acc, :slow) |> Enum.sort_by(& &1.latency_ms, :desc) |> Enum.take(top_n())
+    recent_5xx = read_ring(acc, :err) |> Enum.sort_by(& &1.at, :desc) |> Enum.take(top_n())
+    clear_ring(acc, :slow)
+    clear_ring(acc, :err)
 
     dreq = current.requests - prev.requests
     derr = current.errors - prev.errors
@@ -74,15 +95,17 @@ defmodule BeamScope.Provider.Phoenix do
       status_classes: bucket_delta(current.status, prev.status, @status_classes),
       window_ms: window_ms(),
       requests_total: current.requests,
-      errors_total: current.errors
+      errors_total: current.errors,
+      top_slow: top_slow,
+      recent_5xx: recent_5xx
     }
 
     [phoenix]
   end
 
-  # --- hot path (runs in the request process): atomic increments only ---
+  # --- hot path (runs in the request process): atomic increments + bounded ring writes ---
 
-  defp record(acc, duration, status, error?) do
+  defp record(acc, duration, status, error?, metadata) do
     :ets.update_counter(acc, :requests_total, 1, {:requests_total, 0})
     :ets.update_counter(acc, :dur_native_sum, duration, {:dur_native_sum, 0})
     if error?, do: :ets.update_counter(acc, :errors_total, 1, {:errors_total, 0})
@@ -90,10 +113,67 @@ defmodule BeamScope.Provider.Phoenix do
     if class = status_class(status),
       do: :ets.update_counter(acc, {:status, class}, 1, {{:status, class}, 0})
 
-    bucket = lat_bucket(System.convert_time_unit(duration, :native, :millisecond))
+    ms = System.convert_time_unit(duration, :native, :millisecond)
+    bucket = lat_bucket(ms)
     :ets.update_counter(acc, {:lat, bucket}, 1, {{:lat, bucket}, 0})
+
+    maybe_sample(acc, status, ms, error?, metadata)
     :ok
   end
+
+  # Bounded, lock-free notable-request sampling (ADR-0010). At most one thin NotableRequest is
+  # built — only for a slow (≥ floor) or error request — and written to the slow and/or error
+  # ring; the fast, non-error majority pays nothing beyond the counters above. Each ring write
+  # is an atomic cursor increment (a distinct monotonic index per concurrent writer) plus an
+  # insert to that index's own slot, so there is no lock and no lost-update corruption — the
+  # only loss is ring overwrite when a window's volume exceeds the cap (the sanctioned sample).
+  defp maybe_sample(acc, status, ms, error?, metadata) do
+    slow? = ms >= slow_floor_ms()
+
+    if slow? or error? do
+      req = %NotableRequest{
+        route: route_template(metadata),
+        status: status,
+        latency_ms: ms,
+        at: System.system_time(:millisecond)
+      }
+
+      if slow?, do: ring_put(acc, :slow, req, slow_cap())
+      if error?, do: ring_put(acc, :err, req, err_cap())
+    end
+
+    :ok
+  end
+
+  defp ring_put(acc, kind, req, cap) do
+    i = :ets.update_counter(acc, cursor(kind), 1, {cursor(kind), 0})
+    :ets.insert(acc, {{kind, rem(i - 1, cap)}, req})
+  end
+
+  # Compiled route TEMPLATE only — never a concrete path or params (ADR-0010 Rule 2). Resolved
+  # at runtime through the conn's own router via `Phoenix.Router.route_info/4`; the module is
+  # hidden behind an atom (`phoenix_router_mod/0`) so this provider references only telemetry
+  # atoms and carries no compile-time Phoenix dependency. Any failure — missing conn/router, an
+  # unmatched path (common on the :exception path and on 404s), or a version/arity mismatch —
+  # degrades to the constant "(unmatched)"; a concrete path is never substituted.
+  defp route_template(%{conn: %{private: %{phoenix_router: router}} = conn})
+       when is_atom(router) and router != nil do
+    case apply(phoenix_router_mod(), :route_info, [
+           router,
+           conn.method,
+           conn.request_path,
+           conn.host
+         ]) do
+      %{route: route} when is_binary(route) -> route
+      _ -> @unmatched
+    end
+  rescue
+    _ -> @unmatched
+  end
+
+  defp route_template(_), do: @unmatched
+
+  defp phoenix_router_mod, do: :"Elixir.Phoenix.Router"
 
   defp duration_of(%{duration: d}) when is_integer(d), do: d
   defp duration_of(_), do: 0
@@ -148,7 +228,21 @@ defmodule BeamScope.Provider.Phoenix do
   defp avg_latency(_dsum, 0), do: nil
   defp avg_latency(dsum, dreq), do: System.convert_time_unit(dsum, :native, :millisecond) / dreq
 
+  defp read_ring(acc, kind) do
+    for {{^kind, _slot}, req} <- :ets.match_object(acc, {{kind, :_}, :_}), do: req
+  end
+
+  defp clear_ring(acc, kind), do: :ets.match_delete(acc, {{kind, :_}, :_})
+
   defp window_ms, do: Application.get_env(:beam_scope, :sync_interval, :timer.seconds(1))
+
+  defp top_n, do: Application.get_env(:beam_scope, :top_n, 5)
+  defp slow_floor_ms, do: Application.get_env(:beam_scope, :phoenix_slow_floor_ms, 50)
+  defp slow_cap, do: 4 * top_n()
+  defp err_cap, do: top_n()
+
+  defp cursor(:slow), do: :slow_cursor
+  defp cursor(:err), do: :err_cursor
 
   defp counter(acc, key) do
     case :ets.lookup(acc, key) do

@@ -2,6 +2,7 @@ defmodule BeamScope.Exporter.DashboardTest do
   use ExUnit.Case, async: true
 
   alias BeamScope.{ClusterNode, Mailbox, Phoenix, ProcessSummary, VM}
+  alias BeamScope.Phoenix.NotableRequest
   alias BeamScope.Exporter.Dashboard
 
   test "render/1 builds an HTML page with a row per node" do
@@ -21,7 +22,15 @@ defmodule BeamScope.Exporter.DashboardTest do
               distribution: %{"0" => 5, "1-9" => 3, "10-99" => 1, "100-999" => 0, "1000+" => 1}
             }
           ],
-          phoenix: [%Phoenix{requests: 128, error_rate: 0.05, avg_latency_ms: 12.5}]
+          phoenix: [
+            %Phoenix{
+              requests: 12,
+              error_rate: 0.05,
+              avg_latency_ms: 12.5,
+              requests_total: 128,
+              errors_total: 6
+            }
+          ]
         }
       },
       %ClusterNode{node: :b@h, liveness: :expired, entities: %{}}
@@ -38,8 +47,9 @@ defmodule BeamScope.Exporter.DashboardTest do
     # mailbox column renders queued totals and the backlog threshold marker
     assert html =~ "queued"
     assert html =~ "≥ 1000"
-    # phoenix column renders windowed requests, error rate, and average latency
+    # phoenix column renders cumulative totals, the windowed error rate, and average latency
     assert html =~ "128 req"
+    assert html =~ "6 err"
     assert html =~ "12.5 ms"
     # a node without a VM entity renders an em dash rather than crashing
     assert html =~ "—"
@@ -49,5 +59,53 @@ defmodule BeamScope.Exporter.DashboardTest do
     node = %ClusterNode{node: :a@h, liveness: :live, entities: %{}}
     html = Dashboard.render([node]) |> IO.iodata_to_binary()
     refute html =~ "<script>"
+  end
+
+  test "render/1 composes a fleet-wide notable-requests section across nodes" do
+    nodes = [
+      %ClusterNode{
+        node: :a@h,
+        liveness: :live,
+        entities: %{
+          phoenix: [
+            %Phoenix{
+              top_slow: [%NotableRequest{route: "/a", status: 200, latency_ms: 120, at: 1_000}],
+              recent_5xx: [%NotableRequest{route: "/a", status: 500, latency_ms: 30, at: 1_000}]
+            }
+          ]
+        }
+      },
+      %ClusterNode{
+        node: :b@h,
+        liveness: :live,
+        entities: %{
+          phoenix: [
+            %Phoenix{
+              top_slow: [%NotableRequest{route: "/b", status: 200, latency_ms: 900, at: 2_000}],
+              recent_5xx: []
+            }
+          ]
+        }
+      }
+    ]
+
+    html = Dashboard.render(nodes) |> IO.iodata_to_binary()
+
+    assert html =~ "Notable requests"
+    assert html =~ "Slowest requests"
+    assert html =~ "Recent 5xx"
+    # the slowest across the fleet (900 ms on node b) is composed at read time
+    assert html =~ "900 ms"
+    assert html =~ "/b"
+    # both nodes' routes appear, each stamped with its node
+    assert html =~ "b@h"
+    # node b's slowest is ordered ahead of node a's (read-time re-sort by latency)
+    assert :binary.match(html, "/b") |> elem(0) < :binary.match(html, "/a") |> elem(0)
+  end
+
+  test "render/1 omits the notable section when no node has notable requests" do
+    node = %ClusterNode{node: :a@h, liveness: :live, entities: %{phoenix: [%Phoenix{}]}}
+    html = Dashboard.render([node]) |> IO.iodata_to_binary()
+    refute html =~ "Notable requests"
   end
 end
