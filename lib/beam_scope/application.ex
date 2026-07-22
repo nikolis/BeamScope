@@ -27,11 +27,22 @@ defmodule BeamScope.Application do
         BeamScope.ClusterState
       ] ++
         pubsub_children() ++
-        aggregation_children() ++
-        sync_children() ++
+        aggregation_children() ++ #BeamScope.Aggregation.Supervisor 
+        sync_children() ++ #BeamScope.Synchronization.SnapshotGossip
         [BeamScope.Exporters.Supervisor]
 
     Supervisor.start_link(children, strategy: :one_for_one, name: BeamScope.Supervisor)
+  end
+
+
+  # Local aggregation is toggleable so tests can drive `ClusterState` deterministically
+  # (see config/test.exs).
+  defp aggregation_children do
+    if Application.get_env(:beam_scope, :aggregation, true) do
+      [BeamScope.Aggregation.Supervisor]
+    else
+      []
+    end
   end
 
   # Embedded mode: the host provides Phoenix.PubSub. For standalone/dev runs we start our
@@ -42,16 +53,6 @@ defmodule BeamScope.Application do
       [{Phoenix.PubSub, name: name}]
     else
       _ -> []
-    end
-  end
-
-  # Local aggregation is toggleable so tests can drive `ClusterState` deterministically
-  # (see config/test.exs).
-  defp aggregation_children do
-    if Application.get_env(:beam_scope, :aggregation, true) do
-      [BeamScope.Aggregation.Supervisor]
-    else
-      []
     end
   end
 
