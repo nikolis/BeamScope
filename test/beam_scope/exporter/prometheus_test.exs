@@ -1,7 +1,7 @@
 defmodule BeamScope.Exporter.PrometheusTest do
   use ExUnit.Case, async: false
 
-  alias BeamScope.{ClusterNode, ClusterState, ETS, ProcessSummary, Scheduler, VM}
+  alias BeamScope.{ClusterNode, ClusterState, ETS, Mailbox, ProcessSummary, Scheduler, VM}
   alias BeamScope.Exporter.Prometheus
 
   defp full_node(name, liveness \\ :live, util \\ 0.5) do
@@ -19,7 +19,16 @@ defmodule BeamScope.Exporter.PrometheusTest do
         ],
         scheduler: [%Scheduler{count: 8, online: 8, utilization: util}],
         processes: [%ProcessSummary{count: 10, limit: 100}],
-        ets: [%ETS{table_count: 4, memory_bytes: 2_048}]
+        ets: [%ETS{table_count: 4, memory_bytes: 2_048}],
+        mailbox: [
+          %Mailbox{
+            total_queued: 42,
+            max_queued: 30,
+            backlogged: 2,
+            backlog_threshold: 1000,
+            distribution: %{"0" => 5, "1-9" => 3, "10-99" => 1, "100-999" => 0, "1000+" => 1}
+          }
+        ]
       }
     }
   end
@@ -34,6 +43,10 @@ defmodule BeamScope.Exporter.PrometheusTest do
     assert text =~ ~s(beamscope_scheduler_utilization{node="a@h"} 0.5)
     assert text =~ ~s(beamscope_process_count{node="a@h"} 10)
     assert text =~ ~s(beamscope_ets_memory_bytes{node="a@h"} 2048)
+    assert text =~ "# TYPE beamscope_mailbox_total_queued gauge"
+    assert text =~ ~s(beamscope_mailbox_total_queued{node="a@h"} 42)
+    assert text =~ ~s(beamscope_mailbox_backlogged{node="a@h",threshold="1000"} 2)
+    assert text =~ ~s(beamscope_mailbox_distribution{node="a@h",bucket="1000+"} 1)
   end
 
   test "render/1 skips nil measurements (no binary memory series)" do

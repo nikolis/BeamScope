@@ -89,7 +89,6 @@ defmodule BeamScope.ClusterState do
     {:ok, %{table: table, incarnation: System.system_time(:millisecond), version: 0}}
   end
 
-
   @impl true
   def handle_call({:put_local, entities}, _from, state) do
     version = state.version + 1

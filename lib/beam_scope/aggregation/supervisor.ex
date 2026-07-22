@@ -16,7 +16,8 @@ defmodule BeamScope.Aggregation.Supervisor do
     {BeamScope.Provider.VM, :vm},
     {BeamScope.Provider.Scheduler, :scheduler},
     {BeamScope.Provider.Processes, :processes},
-    {BeamScope.Provider.ETS, :ets}
+    {BeamScope.Provider.ETS, :ets},
+    {BeamScope.Provider.Mailbox, :mailbox}
   ]
 
   def start_link(opts) do
@@ -35,9 +36,9 @@ defmodule BeamScope.Aggregation.Supervisor do
 
     measurements =
       for {provider, _domain} <- providers,
-          #Could be configureation defined modules so we need to verify their existance
+          # Could be configureation defined modules so we need to verify their existance
           Code.ensure_loaded?(provider),
-          #Again externaly defined providers so we need to make sure they implement :poll with zero params
+          # Again externaly defined providers so we need to make sure they implement :poll with zero params
           function_exported?(provider, :poll, 0),
           do: {provider, :poll, []}
 
