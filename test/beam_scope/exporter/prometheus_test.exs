@@ -1,7 +1,17 @@
 defmodule BeamScope.Exporter.PrometheusTest do
   use ExUnit.Case, async: false
 
-  alias BeamScope.{ClusterNode, ClusterState, ETS, Mailbox, Phoenix, ProcessSummary, Scheduler, VM}
+  alias BeamScope.{
+    ClusterNode,
+    ClusterState,
+    ETS,
+    Mailbox,
+    Phoenix,
+    ProcessSummary,
+    Scheduler,
+    VM
+  }
+
   alias BeamScope.Exporter.Prometheus
 
   defp full_node(name, liveness \\ :live, util \\ 0.5) do

@@ -21,7 +21,13 @@ defmodule BeamScope.Provider.PhoenixTest do
     stop(acc, 200, 30)
     stop(acc, 404, 12)
     stop(acc, 500, 250)
-    Provider.aggregate(@exception, %{duration: System.convert_time_unit(9, :millisecond, :native)}, %{}, acc)
+
+    Provider.aggregate(
+      @exception,
+      %{duration: System.convert_time_unit(9, :millisecond, :native)},
+      %{},
+      acc
+    )
 
     assert [%Phoenix{} = p] = Provider.snapshot(acc)
 
@@ -56,6 +62,7 @@ defmodule BeamScope.Provider.PhoenixTest do
     assert [%Phoenix{requests: 0, errors: 0, requests_total: 2}] = Provider.snapshot(acc)
 
     stop(acc, 500, 5)
+
     assert [%Phoenix{requests: 1, errors: 1, requests_total: 3, errors_total: 1} = p] =
              Provider.snapshot(acc)
 

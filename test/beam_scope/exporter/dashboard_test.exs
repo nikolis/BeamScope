@@ -21,7 +21,15 @@ defmodule BeamScope.Exporter.DashboardTest do
               distribution: %{"0" => 5, "1-9" => 3, "10-99" => 1, "100-999" => 0, "1000+" => 1}
             }
           ],
-          phoenix: [%Phoenix{requests: 128, error_rate: 0.05, avg_latency_ms: 12.5}]
+          phoenix: [
+            %Phoenix{
+              requests: 12,
+              error_rate: 0.05,
+              avg_latency_ms: 12.5,
+              requests_total: 128,
+              errors_total: 6
+            }
+          ]
         }
       },
       %ClusterNode{node: :b@h, liveness: :expired, entities: %{}}
@@ -38,8 +46,9 @@ defmodule BeamScope.Exporter.DashboardTest do
     # mailbox column renders queued totals and the backlog threshold marker
     assert html =~ "queued"
     assert html =~ "≥ 1000"
-    # phoenix column renders windowed requests, error rate, and average latency
+    # phoenix column renders cumulative totals, the windowed error rate, and average latency
     assert html =~ "128 req"
+    assert html =~ "6 err"
     assert html =~ "12.5 ms"
     # a node without a VM entity renders an em dash rather than crashing
     assert html =~ "—"

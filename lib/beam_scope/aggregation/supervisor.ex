@@ -3,9 +3,11 @@ defmodule BeamScope.Aggregation.Supervisor do
   Supervises the local aggregation subsystem (ADR-0003/0008): one `BeamScope.Aggregator`
   per enabled domain provider, plus the `:telemetry_poller` that drives gauge providers.
 
-  The enabled domains are a config list of `{provider, domain}` (ADR-0008 "add a domain =
-  add to the list"), overridable via `config :beam_scope, :providers`. One
-  `BeamScope.Aggregator` runs per provider, and a single shared `:telemetry_poller` drives
+  The enabled domains are the core defaults (`@default_providers`) plus any framework
+  providers a host adds via `config :beam_scope, :providers` (ADR-0008 "add a domain = add
+  to the list"). The configured list is *merged on top of* the defaults — it adds providers
+  rather than replacing the set — so enabling e.g. Phoenix never silences the core domains.
+  One `BeamScope.Aggregator` runs per provider, and a single shared `:telemetry_poller` drives
   every provider's `poll/0`. Aggregators start before the poller so their telemetry
   handlers are attached before the first measurement is emitted.
   """
@@ -27,7 +29,7 @@ defmodule BeamScope.Aggregation.Supervisor do
   @impl true
   def init(_opts) do
     interval = Application.get_env(:beam_scope, :sync_interval, :timer.seconds(1))
-    providers = Application.get_env(:beam_scope, :providers, @default_providers)
+    providers = resolve_providers()
 
     aggregators =
       for {provider, domain} <- providers do
@@ -46,5 +48,16 @@ defmodule BeamScope.Aggregation.Supervisor do
       {:telemetry_poller, measurements: measurements, period: interval, name: :beam_scope_poller}
 
     Supervisor.init(aggregators ++ [poller], strategy: :one_for_one)
+  end
+
+  @doc """
+  The enabled `{provider, domain}` list: the core defaults with any configured framework
+  providers (`config :beam_scope, :providers`) merged on top. Configured entries are appended
+  to the defaults and de-duplicated, so adding a provider never drops a default one.
+  """
+  @spec resolve_providers() :: [{module(), atom()}]
+  def resolve_providers do
+    configured = Application.get_env(:beam_scope, :providers, [])
+    Enum.uniq(@default_providers ++ configured)
   end
 end

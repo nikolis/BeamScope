@@ -32,7 +32,9 @@ defmodule BeamScope.Exporter.Dashboard do
       "</style></head><body>",
       "<h1>BeamScope <span class=\"sub\">cluster runtime model</span></h1>",
       "<table><thead><tr>",
-      th(~w(Node Liveness VM memory Run queue Uptime Sched util Processes ETS Mailbox Backlog Phoenix)),
+      th(
+        ~w(Node Liveness VM memory Run queue Uptime Sched util Processes ETS Mailbox Backlog Phoenix)
+      ),
       "</tr></thead><tbody>",
       nodes |> Enum.sort_by(& &1.node) |> Enum.map(&row/1),
       "</tbody></table>",
@@ -84,10 +86,12 @@ defmodule BeamScope.Exporter.Dashboard do
       td(
         phoenix &&
           [
-            Integer.to_string(phoenix.requests),
+            Integer.to_string(phoenix.requests_total),
             " req · ",
-            percent(phoenix.error_rate),
+            Integer.to_string(phoenix.errors_total),
             " err · ",
+            percent(phoenix.error_rate),
+            " err rate · ",
             latency(phoenix.avg_latency_ms)
           ]
       ),

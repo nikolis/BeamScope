@@ -114,6 +114,41 @@ Passing this is the definition of done for v1 and the green light to add domains
 > integration test (`mix test --only distributed`) and was verified live on a 2-node cluster. The
 > architecture is sound; adding domains/exporters/sync-strategies is now purely additive.
 
+## Post-MVP — delivered
+
+Items pulled from the menu below and shipped, each **additive with zero core change** — the proof
+the plugin architecture (ADR-0008) pays off.
+
+### Mailbox domain provider ✅
+- `BeamScope.Provider.Mailbox` + `BeamScope.Mailbox`: the aggregate/distributional mailbox view
+  (total/max queued, backlogged count, fixed 5-bucket histogram) — the remaining
+  framework-independent domain (ADR-0004/0008), on the default provider list, distinct from
+  `ProcessSummary`'s per-process top-N. Public API `BeamScope.mailbox/1`; rendered by both exporters.
+
+### Phoenix (HTTP) domain provider ✅ — *first framework provider*
+- `BeamScope.Provider.Phoenix` + `BeamScope.Phoenix` (domain `:phoenix`), the first framework
+  provider (ADR-0008) and the first **purely event-driven** one: no `poll/0`, it folds Phoenix's own
+  `[:phoenix, :endpoint, :stop | :exception]` telemetry. It references only telemetry **atoms**, so
+  it needs **no Phoenix dependency** and stays inert on a node emitting no such events.
+- **Metric semantics (per ADR-0001, "observations not data"):** windowed per-interval gauges —
+  requests, errors (5xx + endpoint exceptions), `error_rate`, `avg_latency_ms`, a fixed latency
+  histogram, and a status-class distribution over the last tick — **plus** per-node monotonic
+  `requests_total`/`errors_total` (the same category as `VM.uptime_ms`) so Prometheus `rate()` has a
+  counter. Hot path is atomic `:ets.update_counter/4` only (many concurrent request processes);
+  `snapshot/1` computes deltas vs a `{:prev}` marker it alone writes — race-free, nothing reset.
+- **Scope:** HTTP request surface only. Channels/sockets, LiveView, and Presence remain separate
+  future domains (ADR-0004) — "active connection" counts need pid-`:DOWN` tracking, deferred so they
+  can be built together. No cross-provider "failed upgrade" signal (unsound + would break ADR-0008
+  isolation); failed upgrades already surface as 4xx/426 in the status distribution.
+- **Enablement:** opt-in — *not* on the default provider list; add
+  `{BeamScope.Provider.Phoenix, :phoenix}` to `config :beam_scope, :providers` (set the full list).
+  Public API `BeamScope.phoenix/1`; rendered by both exporters (node-labelled Prometheus families +
+  a dashboard column), which degrade to absent/`—` when the provider is off.
+- **Exit criterion — MET:** `mix precommit` green (provider unit tests incl. windowing-across-ticks,
+  empty-acc tolerance, unknown-event fallthrough, and missing-`conn` defensiveness; exporter render
+  tests for the new series/column); a live run with simulated `[:phoenix, :endpoint, :stop]`
+  telemetry populates `BeamScope.phoenix(node())` and the `/metrics` + `/` endpoints.
+
 ## Post-MVP (roadmap only — not scheduled here)
 
 Each item below is *additive*, requiring **no core change** — that is the payoff of the
@@ -168,9 +203,13 @@ telemetry are present.
 
 - **Mailbox** domain — the remaining framework-independent domain from the 13-domain vision
   (ADR-0004/0008), distinct from `ProcessSummary`, built solely on runtime introspection.
+  **✅ Delivered** (see *Post-MVP — delivered* above).
 - **Framework providers** — Phoenix, LiveView, Presence, Oban, Broadway, and custom metrics. Each
   contributes its own struct(s) to the model, adds its own additive `BeamScope.<domain>(node)`
-  accessor (ADR-0009), and is fault-isolated to its own domain's snapshots.
+  accessor (ADR-0009), and is fault-isolated to its own domain's snapshots. **Phoenix (HTTP) ✅
+  delivered** (first framework provider; see above). **LiveView / Presence** are the natural next
+  pull — together, since both need pid-`:DOWN` monitoring for active-connection counts that Phoenix
+  telemetry alone cannot provide. Oban / Broadway / custom remain open.
 
 ### Deployment topology (ADR-0002)
 

@@ -162,7 +162,8 @@ defmodule BeamScope.Exporter.Prometheus do
   end
 
   defp phoenix_latency_buckets(distribution) do
-    for label <- ~w(0-10 10-50 50-200 200-1000 1000+), do: {label, Map.get(distribution, label, 0)}
+    for label <- ~w(0-10 10-50 50-200 200-1000 1000+),
+        do: {label, Map.get(distribution, label, 0)}
   end
 
   # Generic single-gauge series for an entity field.

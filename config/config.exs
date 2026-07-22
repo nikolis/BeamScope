@@ -26,23 +26,11 @@ config :beam_scope,
   # longer are counted as backlogged.
   mailbox_backlog_threshold: 1000
 
-# Enabled domain providers (ADR-0008). Defaults to VM + Scheduler + Processes + ETS +
-# Mailbox; override to add framework providers or drop heavier ones (e.g. to avoid
-# enabling the global :scheduler_wall_time flag). Shape: [{provider_module, domain_atom}, ...].
+# Framework domain providers (ADR-0008). The core defaults — VM + Scheduler + Processes +
+# ETS + Mailbox — are always enabled; the `:providers` list is *merged on top* of them, so
+# it adds providers rather than replacing the set. Shape: [{provider_module, domain_atom}, ...].
+# To observe a Phoenix host's HTTP surface, just add its provider — the defaults keep running:
 #
-#     config :beam_scope, providers: [{BeamScope.Provider.VM, :vm}]
-#
-# Framework providers are opt-in — set the FULL list (there is no config-merge helper).
-# To observe a Phoenix host's HTTP surface, add {BeamScope.Provider.Phoenix, :phoenix}:
-#
-#     config :beam_scope,
-#       providers: [
-#         {BeamScope.Provider.VM, :vm},
-#         {BeamScope.Provider.Scheduler, :scheduler},
-#         {BeamScope.Provider.Processes, :processes},
-#         {BeamScope.Provider.ETS, :ets},
-#         {BeamScope.Provider.Mailbox, :mailbox},
-#         {BeamScope.Provider.Phoenix, :phoenix}
-#       ]
+#     config :beam_scope, providers: [{BeamScope.Provider.Phoenix, :phoenix}]
 
 import_config "#{config_env()}.exs"
