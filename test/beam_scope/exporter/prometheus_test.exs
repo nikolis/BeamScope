@@ -55,7 +55,23 @@ defmodule BeamScope.Exporter.PrometheusTest do
             status_classes: %{"2xx" => 120, "3xx" => 0, "4xx" => 5, "5xx" => 3},
             window_ms: 1000,
             requests_total: 10_000,
-            errors_total: 42
+            errors_total: 42,
+            top_slow: [
+              %BeamScope.Phoenix.NotableRequest{
+                route: "/users/:id",
+                status: 200,
+                latency_ms: 950,
+                at: 1_000
+              }
+            ],
+            recent_5xx: [
+              %BeamScope.Phoenix.NotableRequest{
+                route: "/checkout",
+                status: 503,
+                latency_ms: 40,
+                at: 1_000
+              }
+            ]
           }
         ]
       }
@@ -83,6 +99,16 @@ defmodule BeamScope.Exporter.PrometheusTest do
     assert text =~ ~s(beamscope_phoenix_avg_latency_ms{node="a@h"} 12.5)
     assert text =~ ~s(beamscope_phoenix_status{node="a@h",class="2xx"} 120)
     assert text =~ ~s(beamscope_phoenix_latency{node="a@h",bucket="0-10"} 100)
+  end
+
+  test "render/1 never emits a per-route family or leaks route templates (ADR-0010)" do
+    text = Prometheus.render([full_node(:a@h)]) |> IO.iodata_to_binary()
+
+    # notable requests are a dashboard/API surface only — no unbounded-cardinality route labels
+    refute text =~ "beamscope_phoenix_route"
+    refute text =~ ~s(route=)
+    refute text =~ "/users/:id"
+    refute text =~ "/checkout"
   end
 
   test "render/1 skips nil measurements (no binary memory series)" do

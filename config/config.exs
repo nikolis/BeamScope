@@ -20,8 +20,12 @@ config :beam_scope,
   sync: BeamScope.Synchronization.SnapshotGossip,
   sync_interval: :timer.seconds(1),
   node_ttl: :timer.seconds(5),
-  # Top-N bound for the Process/ETS providers (largest mailboxes/memory/tables).
+  # Top-N bound for the Process/ETS providers (largest mailboxes/memory/tables) and for the
+  # Phoenix provider's bounded notable-request samples (top_slow/recent_5xx, ADR-0010).
   top_n: 5,
+  # Latency floor (ms) for the Phoenix `top_slow` sample: only requests at least this slow are
+  # sampled (and pay route-template extraction), so the fast majority costs nothing extra.
+  phoenix_slow_floor_ms: 50,
   # Backlog threshold for the Mailbox provider: processes with a mailbox this long or
   # longer are counted as backlogged.
   mailbox_backlog_threshold: 1000

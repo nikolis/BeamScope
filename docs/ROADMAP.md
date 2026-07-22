@@ -149,6 +149,28 @@ the plugin architecture (ADR-0008) pays off.
   tests for the new series/column); a live run with simulated `[:phoenix, :endpoint, :stop]`
   telemetry populates `BeamScope.phoenix(node())` and the `/metrics` + `/` endpoints.
 
+### Bounded "notable requests" for Phoenix ✅ — *first sample-based field*
+- `BeamScope.Phoenix.NotableRequest` + two bounded lists on `%BeamScope.Phoenix{}` — `top_slow`
+  (slowest requests this window) and `recent_5xx` (most recent 5xx/exceptions) — populated by the
+  existing Phoenix provider from the same `[:phoenix, :endpoint, :stop | :exception]` telemetry
+  (ADR-0010). A *signpost*, not a request store: a **lossy, window-scoped, PII-free sample** (route
+  **template**, status, latency, timestamp only — never concrete paths, params, or stacktraces).
+- **Hot path stays lock-free (ADR-0003):** only a *slow* (≥ `:phoenix_slow_floor_ms`, default 50) or
+  *error* request builds a thin `NotableRequest` and writes it to a fixed-size ring keyed by an
+  atomic cursor (a distinct index per concurrent writer, one insert to its own slot), so no request
+  can corrupt another; the fast majority pays nothing beyond the existing counters. `snapshot/1`
+  ranks each ring (`top_n`) and clears its slots per window (the analog of the `:prev` swap).
+- **No new core / merge semantics (ADR-0006):** each node carries only its own top-N, merged
+  per-node LWW like every other observation; a fleet-wide "slowest across the cluster" view is
+  composed **at read time** in the dashboard exporter (concatenate + re-sort), never inside
+  `ClusterState`. Route **templates** are extracted via `Phoenix.Router.route_info/4` dispatched
+  dynamically, so the provider keeps its zero-compile-dependency purity; any failure degrades to
+  `"(unmatched)"`. Prometheus is left unchanged (a per-route family is unbounded-cardinality and out).
+- **Exit criterion — MET:** `mix precommit` green (provider tests for floor-gated `top_slow`,
+  recency-ordered `recent_5xx`, `top_n` bounding, per-window clearing, and the `"(unmatched)"`
+  fallback; dashboard test for read-time cross-node composition; a Prometheus test asserting no
+  route label ever leaks).
+
 ## Post-MVP (roadmap only — not scheduled here)
 
 Each item below is *additive*, requiring **no core change** — that is the payoff of the
@@ -210,6 +232,12 @@ telemetry are present.
   delivered** (first framework provider; see above). **LiveView / Presence** are the natural next
   pull — together, since both need pid-`:DOWN` monitoring for active-connection counts that Phoenix
   telemetry alone cannot provide. Oban / Broadway / custom remain open.
+- **Bounded "notable requests" for Phoenix** (ADR-0010) — a fixed-N, PII-free sample
+  (`top_slow` + `recent_5xx`: route template, status, latency, timestamp) added additively to the
+  Phoenix entity, mirroring the `ProcessSummary`/`ETS` top-N precedent. A *signpost* ("which route /
+  node is hot?"), not a request store: full per-request investigation is tracing/APM and composes
+  alongside BeamScope via OpenTelemetry (`opentelemetry_phoenix`), not inside the pipeline.
+  **✅ Delivered** (see *Post-MVP — delivered* above).
 
 ### Deployment topology (ADR-0002)
 

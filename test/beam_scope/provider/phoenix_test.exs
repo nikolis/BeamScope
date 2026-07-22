@@ -3,6 +3,7 @@ defmodule BeamScope.Provider.PhoenixTest do
 
   alias BeamScope.Provider.Phoenix, as: Provider
   alias BeamScope.Phoenix
+  alias BeamScope.Phoenix.NotableRequest
 
   @stop [:phoenix, :endpoint, :stop]
   @exception [:phoenix, :endpoint, :exception]
@@ -78,6 +79,60 @@ defmodule BeamScope.Provider.PhoenixTest do
     assert p.requests_total == 0
     assert map_size(p.latency_distribution) == 5
     assert map_size(p.status_classes) == 4
+    assert p.top_slow == []
+    assert p.recent_5xx == []
+  end
+
+  # --- notable requests (ADR-0010) ---
+
+  test "top_slow samples only requests at/above the floor, sorted by latency desc", %{acc: acc} do
+    stop(acc, 200, 5)
+    stop(acc, 200, 49)
+    stop(acc, 200, 60)
+    stop(acc, 200, 300)
+    stop(acc, 200, 120)
+
+    assert [%Phoenix{} = p] = Provider.snapshot(acc)
+
+    # sub-floor (5ms, 49ms) requests are dropped; the rest rank by latency desc
+    assert Enum.map(p.top_slow, & &1.latency_ms) == [300, 120, 60]
+    assert Enum.all?(p.top_slow, &match?(%NotableRequest{status: 200}, &1))
+    # no router in the metadata fixture → the PII-free fallback template, never a concrete path
+    assert Enum.all?(p.top_slow, &(&1.route == "(unmatched)"))
+  end
+
+  test "recent_5xx captures 5xx and exceptions, most-recent-first", %{acc: acc} do
+    stop(acc, 500, 5)
+    Process.sleep(2)
+    stop(acc, 503, 5)
+    Process.sleep(2)
+    # exception with no conn is still an error, attributed to 500 with the fallback route
+    Provider.aggregate(@exception, %{duration: 0}, %{}, acc)
+
+    assert [%Phoenix{} = p] = Provider.snapshot(acc)
+
+    assert length(p.recent_5xx) == 3
+    # the exception was recorded last, so it heads the recency-ordered list
+    assert [%NotableRequest{status: 500, route: "(unmatched)"} | _] = p.recent_5xx
+    assert p.recent_5xx |> Enum.map(& &1.status) |> Enum.sort() == [500, 500, 503]
+    # a fast (5ms) error is an error but not slow, so it never enters top_slow
+    assert p.top_slow == []
+  end
+
+  test "notable samples are bounded to top_n regardless of volume", %{acc: acc} do
+    for i <- 1..30, do: stop(acc, 500, 50 + i)
+
+    assert [%Phoenix{} = p] = Provider.snapshot(acc)
+    assert length(p.top_slow) == 5
+    assert length(p.recent_5xx) == 5
+  end
+
+  test "notable samples are window-scoped and cleared each tick", %{acc: acc} do
+    stop(acc, 500, 100)
+
+    assert [%Phoenix{top_slow: [_], recent_5xx: [_]}] = Provider.snapshot(acc)
+    # a subsequent tick with no activity starts from an empty sample
+    assert [%Phoenix{top_slow: [], recent_5xx: []}] = Provider.snapshot(acc)
   end
 
   test "aggregate/4 ignores unknown events", %{acc: acc} do

@@ -2,7 +2,8 @@
 
 - **Status:** Accepted — 2026-07-15
 - **Deciders:** Project architect
-- **Related:** ADR-0003 (aggregation), ADR-0006 (ClusterState), ADR-0009 (public API)
+- **Related:** ADR-0003 (aggregation), ADR-0006 (ClusterState), ADR-0009 (public API),
+  ADR-0010 (bounded notable requests)
 
 ## Context
 
