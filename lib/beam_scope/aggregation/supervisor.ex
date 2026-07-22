@@ -35,7 +35,9 @@ defmodule BeamScope.Aggregation.Supervisor do
 
     measurements =
       for {provider, _domain} <- providers,
+          #Could be configureation defined modules so we need to verify their existance
           Code.ensure_loaded?(provider),
+          #Again externaly defined providers so we need to make sure they implement :poll with zero params
           function_exported?(provider, :poll, 0),
           do: {provider, :poll, []}
 
