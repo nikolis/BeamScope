@@ -96,7 +96,12 @@ telemetry emitted *by other libraries* — the pipeline is built for that genera
 the MVP providers exercise the same path.
 
 **Adding a new domain requires zero core changes** (ADR-0008): implement the behaviour,
-add `{MyProvider, :my_domain}` to `config :beam_scope, :providers`, done.
+add `{MyProvider, :my_domain}` to `config :beam_scope, :providers`, done. The first
+*framework* provider, `Provider.Phoenix` (opt-in), is exactly this: instead of a `poll/0`
+it declares Phoenix's own `[:phoenix, :endpoint, :stop | :exception]` events as its
+`sources/0` and folds them on the hot path — the first purely event-driven provider,
+producing a windowed `BeamScope.Phoenix` (requests/errors/latency in the last tick, plus
+per-node monotonic totals) queryable via `BeamScope.phoenix/1`.
 
 ### 3. `BeamScope.Aggregator` (`lib/beam_scope/aggregator.ex`)
 
