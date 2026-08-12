@@ -108,4 +108,94 @@ defmodule BeamScope.Exporter.DashboardTest do
     html = Dashboard.render([node]) |> IO.iodata_to_binary()
     refute html =~ "Notable requests"
   end
+
+  test "render/1 renders the per-node top-N detail already collected by the providers" do
+    nodes = [
+      %ClusterNode{
+        node: :a@h,
+        liveness: :live,
+        entities: %{
+          processes: [
+            %ProcessSummary{
+              count: 10,
+              limit: 100,
+              top_mailboxes: [
+                %{pid: "#PID<0.42.0>", name: S3BrowserLive, value: 259},
+                %{pid: "#PID<0.99.0>", name: nil, value: 3}
+              ],
+              top_memory: [%{pid: "#PID<0.42.0>", name: S3BrowserLive, value: 1_048_576}]
+            }
+          ],
+          ets: [
+            %BeamScope.ETS{
+              table_count: 130,
+              memory_bytes: 402_653_184,
+              largest: [
+                %{name: :recipes_cache, memory_bytes: 220_200_960, size: 5000},
+                %{name: :geo_cache, memory_bytes: 94_371_840, size: 1200}
+              ]
+            }
+          ],
+          mailbox: [
+            %Mailbox{
+              distribution: %{"0" => 640, "1-9" => 5, "10-99" => 0, "100-999" => 1, "1000+" => 0}
+            }
+          ]
+        }
+      }
+    ]
+
+    html = Dashboard.render(nodes) |> IO.iodata_to_binary()
+
+    assert html =~ "Per-node detail"
+    # the deepest mailbox is attributed to its owning process by registered name
+    assert html =~ "Top mailboxes"
+    assert html =~ "S3BrowserLive"
+    assert html =~ "259"
+    # a process with no registered name falls back to its display pid
+    assert html =~ "#PID&lt;0.99.0&gt;"
+    # the ETS total is broken out into the tables that hold it
+    assert html =~ "Largest ETS"
+    assert html =~ "recipes_cache"
+    assert html =~ "210.0 MB"
+    # the 5-bucket histogram distinguishes "one process at 259" from "many mildly backed up"
+    assert html =~ "Mailbox histogram"
+    assert html =~ "640"
+  end
+
+  test "render/1 omits the per-node detail section when no node carries top-N data" do
+    node = %ClusterNode{node: :a@h, liveness: :live, entities: %{processes: [%ProcessSummary{}]}}
+    html = Dashboard.render([node]) |> IO.iodata_to_binary()
+    refute html =~ "Per-node detail"
+  end
+
+  test "render/1 renders the per-node Oban queue view and the LiveView totals cell" do
+    nodes = [
+      %ClusterNode{
+        node: :a@h,
+        liveness: :live,
+        entities: %{
+          oban: [
+            %BeamScope.Oban{
+              executing: %{"imports" => 2, "ai_agents" => 0},
+              completed: %{"imports" => 5},
+              failed: %{"ai_agents" => 1}
+            }
+          ],
+          live_view: [%BeamScope.LiveView{connected_sockets: 7, mounts: 3, handle_events: 40}]
+        }
+      }
+    ]
+
+    html = Dashboard.render(nodes) |> IO.iodata_to_binary()
+
+    # per-node Oban block: seeing the queue and its executing count attributes work to this node
+    assert html =~ "Oban queues"
+    assert html =~ "imports"
+    assert html =~ "ai_agents"
+    # LiveView cell in the totals row is the denominator for "why is this node hot"
+    assert html =~ "7 sockets"
+    assert html =~ "3 mounts"
+    assert html =~ "40 events"
+  end
 end

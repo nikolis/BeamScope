@@ -75,6 +75,20 @@ defmodule BeamScope do
   @spec phoenix(node_name()) :: BeamScope.Phoenix.t() | nil
   def phoenix(the_node), do: entity(the_node, :phoenix)
 
+  @doc """
+  Oban model (per-queue executing gauge, windowed completed/failed) for a node, or `nil` if
+  unknown. Requires the opt-in `BeamScope.Provider.Oban` provider.
+  """
+  @spec oban(node_name()) :: BeamScope.Oban.t() | nil
+  def oban(the_node), do: entity(the_node, :oban)
+
+  @doc """
+  LiveView model (windowed mount/event rates, latency, connected socket count) for a node, or
+  `nil` if unknown. Requires the opt-in `BeamScope.Provider.LiveView` provider.
+  """
+  @spec live_view(node_name()) :: BeamScope.LiveView.t() | nil
+  def live_view(the_node), do: entity(the_node, :live_view)
+
   # Domains are stored as `domain => [entity]`. The MVP domains are all singletons —
   # return the first (only) entity, if present.
   defp entity(the_node, domain) do

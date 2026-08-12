@@ -33,12 +33,13 @@ defmodule BeamScope.Exporter.Dashboard do
       "<h1>BeamScope <span class=\"sub\">cluster runtime model</span></h1>",
       "<table><thead><tr>",
       th(
-        ~w(Node Liveness VM memory Run queue Uptime Sched util Processes ETS Mailbox Backlog Phoenix)
+        ~w(Node Liveness VM memory Run queue Uptime Sched util Processes ETS Mailbox Backlog Phoenix LiveView)
       ),
       "</tr></thead><tbody>",
       nodes |> Enum.sort_by(& &1.node) |> Enum.map(&row/1),
       "</tbody></table>",
       notable_section(nodes),
+      detail_section(nodes),
       "<p class=\"foot\">",
       Integer.to_string(length(nodes)),
       " node(s) · refreshes every ",
@@ -54,6 +55,7 @@ defmodule BeamScope.Exporter.Dashboard do
     ets = first(node, :ets)
     mailbox = first(node, :mailbox)
     phoenix = first(node, :phoenix)
+    live_view = first(node, :live_view)
 
     [
       "<tr><td class=\"mono\">",
@@ -94,6 +96,17 @@ defmodule BeamScope.Exporter.Dashboard do
             percent(phoenix.error_rate),
             " err rate · ",
             latency(phoenix.avg_latency_ms)
+          ]
+      ),
+      td(
+        live_view &&
+          [
+            Integer.to_string(live_view.connected_sockets),
+            " sockets · ",
+            Integer.to_string(live_view.mounts),
+            " mounts · ",
+            Integer.to_string(live_view.handle_events),
+            " events"
           ]
       ),
       "</tr>"
@@ -179,6 +192,147 @@ defmodule BeamScope.Exporter.Dashboard do
     ]
   end
 
+  # Per-node top-N attribution (P1): the top mailboxes / top memory / largest ETS tables and
+  # the mailbox histogram are already collected by the Processes/ETS/Mailbox providers and carried
+  # whole on each node's entity structs — they are just never read by the totals `row/1`. Unlike
+  # the fleet-wide `notable_section/1`, this is a per-node breakdown, so a hot node's totals
+  # attribute to *its own* processes and tables (the exact gap the dashboard left open).
+  @mailbox_buckets ~w(0 1-9 10-99 100-999 1000+)
+
+  defp detail_section(nodes) do
+    blocks = nodes |> Enum.sort_by(& &1.node) |> Enum.map(&node_detail/1)
+
+    if Enum.all?(blocks, &(&1 == [])) do
+      []
+    else
+      ["<h2>Per-node detail <span class=\"sub\">top-N attribution</span></h2>", blocks]
+    end
+  end
+
+  defp node_detail(node) do
+    procs = first(node, :processes)
+    ets = first(node, :ets)
+    mailbox = first(node, :mailbox)
+    oban = first(node, :oban)
+
+    tables = [
+      notable_table(
+        "Top mailboxes",
+        ~w(Process Mailbox),
+        top_n_of(procs, :top_mailboxes),
+        &proc_mailbox_row/1
+      ),
+      notable_table(
+        "Top memory",
+        ~w(Process Memory),
+        top_n_of(procs, :top_memory),
+        &proc_memory_row/1
+      ),
+      notable_table("Largest ETS", ~w(Table Memory Size), top_n_of(ets, :largest), &ets_row/1),
+      mailbox_histogram(mailbox),
+      oban_queues(oban)
+    ]
+
+    if Enum.all?(tables, &(&1 == [])) do
+      []
+    else
+      [
+        "<section class=\"node-detail\"><h3 class=\"node-name mono\">",
+        esc(to_string(node.node)),
+        "</h3><div class=\"notable\">",
+        tables,
+        "</div></section>"
+      ]
+    end
+  end
+
+  defp top_n_of(nil, _field), do: []
+  defp top_n_of(entity, field), do: Map.get(entity, field, [])
+
+  defp proc_mailbox_row(%{value: value} = entry) do
+    [
+      "<tr><td class=\"mono\">",
+      esc(proc_label(entry)),
+      "</td>",
+      td(Integer.to_string(value)),
+      "</tr>"
+    ]
+  end
+
+  defp proc_memory_row(%{value: value} = entry) do
+    ["<tr><td class=\"mono\">", esc(proc_label(entry)), "</td>", td(mb(value)), "</tr>"]
+  end
+
+  # `name` is the registered name (atom) or nil; `pid` is already a display string (ADR-0004:
+  # a remote pid is display-only and never a live reference).
+  defp proc_label(%{name: nil, pid: pid}), do: pid
+  defp proc_label(%{name: name}), do: to_string(name)
+
+  defp ets_row(%{name: name, memory_bytes: memory_bytes, size: size}) do
+    [
+      "<tr><td class=\"mono\">",
+      esc(to_string(name)),
+      "</td>",
+      td(mb(memory_bytes)),
+      td(Integer.to_string(size)),
+      "</tr>"
+    ]
+  end
+
+  defp mailbox_histogram(%{distribution: dist}) when is_map(dist) and map_size(dist) > 0 do
+    cells = Enum.map(@mailbox_buckets, fn b -> td(Integer.to_string(Map.get(dist, b, 0))) end)
+
+    [
+      "<div><h3>Mailbox histogram</h3><table><thead><tr>",
+      th(@mailbox_buckets),
+      "</tr></thead><tbody><tr>",
+      cells,
+      "</tr></tbody></table></div>"
+    ]
+  end
+
+  defp mailbox_histogram(_), do: []
+
+  # Per-queue Oban view (P2): the live executing gauge plus this window's completed/failed
+  # deltas. Seeing the same queue executing on several node rows is the at-a-glance proof that
+  # jobs are distributed rather than siloed on one node.
+  defp oban_queues(%{executing: executing, completed: completed, failed: failed}) do
+    queues =
+      (Map.keys(executing) ++ Map.keys(completed) ++ Map.keys(failed))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    case queues do
+      [] ->
+        []
+
+      _ ->
+        rows =
+          Enum.map(queues, fn queue ->
+            [
+              "<tr><td class=\"mono\">",
+              esc(queue),
+              "</td>",
+              td(Integer.to_string(Map.get(executing, queue, 0))),
+              td(Integer.to_string(Map.get(completed, queue, 0))),
+              td(Integer.to_string(Map.get(failed, queue, 0))),
+              "</tr>"
+            ]
+          end)
+
+        [
+          "<div><h3>Oban queues <span class=\"sub\">executing · window</span></h3>",
+          "<table><thead><tr>",
+          th(~w(Queue Executing Completed Failed)),
+          "</tr></thead><tbody>",
+          rows,
+          "</tbody></table></div>"
+        ]
+    end
+  end
+
+  defp oban_queues(_), do: []
+
   defp clock(at) when is_integer(at) and at > 0 do
     at |> DateTime.from_unix!(:millisecond) |> Calendar.strftime("%H:%M:%S")
   end
@@ -233,6 +387,8 @@ defmodule BeamScope.Exporter.Dashboard do
     h2{font-size:1.1rem;margin:1.75rem 0 .5rem}
     h3{font-size:.85rem;margin:.75rem 0 .35rem;color:#555;text-transform:uppercase;letter-spacing:.03em}
     .notable{display:flex;gap:1.5rem;flex-wrap:wrap}.notable>div{flex:1;min-width:320px}
+    .node-detail{margin:1rem 0 1.5rem}
+    .node-name{font-size:.95rem;color:#1a1a1a;text-transform:none;letter-spacing:0;margin:.5rem 0}
     table{border-collapse:collapse;width:100%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.1)}
     th,td{padding:.5rem .75rem;text-align:left;border-bottom:1px solid #eee}
     th{background:#f4f4f5;font-size:.8rem;text-transform:uppercase;letter-spacing:.03em;color:#666}
@@ -243,7 +399,7 @@ defmodule BeamScope.Exporter.Dashboard do
     .foot{color:#999;margin-top:1rem;font-size:.85rem}
     @media(prefers-color-scheme:dark){body{background:#18181b;color:#e4e4e7}
     table{background:#27272a;box-shadow:none}th{background:#3f3f46;color:#a1a1aa}
-    th,td{border-color:#3f3f46}.sub,.foot,h3{color:#71717a}}
+    th,td{border-color:#3f3f46}.sub,.foot,h3{color:#71717a}.node-name{color:#e4e4e7}}
     """
   end
 end
