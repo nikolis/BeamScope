@@ -36,5 +36,15 @@ config :beam_scope,
 # To observe a Phoenix host's HTTP surface, just add its provider — the defaults keep running:
 #
 #     config :beam_scope, providers: [{BeamScope.Provider.Phoenix, :phoenix}]
+#
+# Other opt-in framework providers (each purely event-driven, no compile-time dep on the target
+# library — they reference only its telemetry event atoms and stay inert if it emits none):
+#
+#     config :beam_scope,
+#       providers: [
+#         {BeamScope.Provider.Phoenix, :phoenix},
+#         {BeamScope.Provider.Oban, :oban},
+#         {BeamScope.Provider.LiveView, :live_view}
+#       ]
 
 import_config "#{config_env()}.exs"
