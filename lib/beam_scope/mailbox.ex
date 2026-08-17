@@ -22,9 +22,18 @@ defmodule BeamScope.Mailbox do
           distribution: distribution()
         }
 
+  # Source of truth for the fixed histogram shape — ordered so both this model and any
+  # renderer iterate the same buckets in the same order (no duplicated literal to drift).
+  @buckets ~w(0 1-9 10-99 100-999 1000+)
+  @default_distribution Map.new(@buckets, &{&1, 0})
+
+  @doc "Ordered mailbox-length histogram bucket labels."
+  @spec buckets() :: [String.t()]
+  def buckets, do: @buckets
+
   defstruct total_queued: 0,
             max_queued: 0,
             backlogged: 0,
             backlog_threshold: 0,
-            distribution: %{"0" => 0, "1-9" => 0, "10-99" => 0, "100-999" => 0, "1000+" => 0}
+            distribution: @default_distribution
 end

@@ -12,6 +12,7 @@ defmodule BeamScope.Exporter.Dashboard do
   """
 
   alias BeamScope.ClusterState
+  alias BeamScope.Mailbox
 
   @refresh_seconds 2
 
@@ -117,6 +118,9 @@ defmodule BeamScope.Exporter.Dashboard do
   # only its own bounded top-N, so a cluster-wide view is produced here by concatenating every
   # node's list, re-sorting, and taking the top-N — never by a special merge in ClusterState
   # (Rule 5). The composed set is eventually-consistent and may differ between viewers.
+  #
+  # (`@mailbox_buckets` used to live here; the histogram now derives its bucket order from
+  # `Mailbox.buckets/0` so the labels can never drift from the model.)
   defp notable_section(nodes) do
     slow =
       nodes
@@ -197,8 +201,6 @@ defmodule BeamScope.Exporter.Dashboard do
   # whole on each node's entity structs — they are just never read by the totals `row/1`. Unlike
   # the fleet-wide `notable_section/1`, this is a per-node breakdown, so a hot node's totals
   # attribute to *its own* processes and tables (the exact gap the dashboard left open).
-  @mailbox_buckets ~w(0 1-9 10-99 100-999 1000+)
-
   defp detail_section(nodes) do
     blocks = nodes |> Enum.sort_by(& &1.node) |> Enum.map(&node_detail/1)
 
@@ -218,10 +220,11 @@ defmodule BeamScope.Exporter.Dashboard do
     tables = [
       notable_table(
         "Top mailboxes",
-        ~w(Process Mailbox),
+        ~w(Process Queued),
         top_n_of(procs, :top_mailboxes),
         &proc_mailbox_row/1
       ),
+      mailbox_histogram(mailbox),
       notable_table(
         "Top memory",
         ~w(Process Memory),
@@ -229,7 +232,6 @@ defmodule BeamScope.Exporter.Dashboard do
         &proc_memory_row/1
       ),
       notable_table("Largest ETS", ~w(Table Memory Size), top_n_of(ets, :largest), &ets_row/1),
-      mailbox_histogram(mailbox),
       oban_queues(oban)
     ]
 
@@ -254,13 +256,13 @@ defmodule BeamScope.Exporter.Dashboard do
       "<tr><td class=\"mono\">",
       esc(proc_label(entry)),
       "</td>",
-      td(Integer.to_string(value)),
+      td(count(value)),
       "</tr>"
     ]
   end
 
   defp proc_memory_row(%{value: value} = entry) do
-    ["<tr><td class=\"mono\">", esc(proc_label(entry)), "</td>", td(mb(value)), "</tr>"]
+    ["<tr><td class=\"mono\">", esc(proc_label(entry)), "</td>", td(bytes(value)), "</tr>"]
   end
 
   # `name` is the registered name (atom) or nil; `pid` is already a display string (ADR-0004:
@@ -273,22 +275,30 @@ defmodule BeamScope.Exporter.Dashboard do
       "<tr><td class=\"mono\">",
       esc(to_string(name)),
       "</td>",
-      td(mb(memory_bytes)),
-      td(Integer.to_string(size)),
+      td(bytes(memory_bytes)),
+      td(count(size)),
       "</tr>"
     ]
   end
 
-  defp mailbox_histogram(%{distribution: dist}) when is_map(dist) and map_size(dist) > 0 do
-    cells = Enum.map(@mailbox_buckets, fn b -> td(Integer.to_string(Map.get(dist, b, 0))) end)
+  # Only the "0" bucket populated means every mailbox is empty — nothing to attribute, so the
+  # histogram is suppressed to match the "hide when empty" behaviour of the top-N tables above.
+  defp mailbox_histogram(%{distribution: dist}) when is_map(dist) do
+    buckets = Mailbox.buckets()
 
-    [
-      "<div><h3>Mailbox histogram</h3><table><thead><tr>",
-      th(@mailbox_buckets),
-      "</tr></thead><tbody><tr>",
-      cells,
-      "</tr></tbody></table></div>"
-    ]
+    if Enum.any?(buckets, fn b -> b != "0" and Map.get(dist, b, 0) > 0 end) do
+      cells = Enum.map(buckets, fn b -> td(count(Map.get(dist, b, 0))) end)
+
+      [
+        "<div><h3>Mailbox histogram</h3><table><thead><tr>",
+        th(buckets),
+        "</tr></thead><tbody><tr>",
+        cells,
+        "</tr></tbody></table></div>"
+      ]
+    else
+      []
+    end
   end
 
   defp mailbox_histogram(_), do: []
@@ -353,6 +363,28 @@ defmodule BeamScope.Exporter.Dashboard do
 
   defp mb(bytes) when is_integer(bytes),
     do: [:erlang.float_to_binary(bytes / 1_048_576, decimals: 1), " MB"]
+
+  # Adaptive byte formatter for values that span orders of magnitude (per-process/per-table
+  # memory), where a fixed MB scale would collapse everything sub-megabyte to "0.0 MB".
+  defp bytes(nil), do: "—"
+
+  defp bytes(n) when is_integer(n) and n < 1_024, do: [Integer.to_string(n), " B"]
+
+  defp bytes(n) when is_integer(n) and n < 1_048_576,
+    do: [:erlang.float_to_binary(n / 1_024, decimals: 1), " KB"]
+
+  defp bytes(n) when is_integer(n) and n < 1_073_741_824,
+    do: [:erlang.float_to_binary(n / 1_048_576, decimals: 1), " MB"]
+
+  defp bytes(n) when is_integer(n),
+    do: [:erlang.float_to_binary(n / 1_073_741_824, decimals: 1), " GB"]
+
+  # Group digits into thousands for readability of large counts (mailbox depth, ETS row counts).
+  defp count(n) when is_integer(n) do
+    n
+    |> Integer.to_string()
+    |> String.replace(~r/\B(?=(\d{3})+(?!\d))/, ",")
+  end
 
   defp percent(nil), do: "—"
 

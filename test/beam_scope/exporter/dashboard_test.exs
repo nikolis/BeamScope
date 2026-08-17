@@ -123,7 +123,10 @@ defmodule BeamScope.Exporter.DashboardTest do
                 %{pid: "#PID<0.42.0>", name: S3BrowserLive, value: 259},
                 %{pid: "#PID<0.99.0>", name: nil, value: 3}
               ],
-              top_memory: [%{pid: "#PID<0.42.0>", name: S3BrowserLive, value: 1_048_576}]
+              top_memory: [
+                %{pid: "#PID<0.42.0>", name: S3BrowserLive, value: 1_048_576},
+                %{pid: "#PID<0.99.0>", name: nil, value: 262_144}
+              ]
             }
           ],
           ets: [
@@ -154,13 +157,35 @@ defmodule BeamScope.Exporter.DashboardTest do
     assert html =~ "259"
     # a process with no registered name falls back to its display pid
     assert html =~ "#PID&lt;0.99.0&gt;"
+    # sub-megabyte process memory keeps its resolution instead of collapsing to "0.0 MB"
+    assert html =~ "256.0 KB"
     # the ETS total is broken out into the tables that hold it
     assert html =~ "Largest ETS"
     assert html =~ "recipes_cache"
     assert html =~ "210.0 MB"
+    # large object counts are grouped for readability
+    assert html =~ "5,000"
     # the 5-bucket histogram distinguishes "one process at 259" from "many mildly backed up"
     assert html =~ "Mailbox histogram"
     assert html =~ "640"
+  end
+
+  test "render/1 suppresses the mailbox histogram when every mailbox is empty" do
+    node = %ClusterNode{
+      node: :a@h,
+      liveness: :live,
+      entities: %{
+        mailbox: [
+          %Mailbox{
+            distribution: %{"0" => 900, "1-9" => 0, "10-99" => 0, "100-999" => 0, "1000+" => 0}
+          }
+        ]
+      }
+    }
+
+    html = Dashboard.render([node]) |> IO.iodata_to_binary()
+
+    refute html =~ "Mailbox histogram"
   end
 
   test "render/1 omits the per-node detail section when no node carries top-N data" do
