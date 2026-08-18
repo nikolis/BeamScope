@@ -26,6 +26,16 @@ defmodule BeamScope.Exporter.Prometheus do
       {"beamscope_node_up", "1 if the node is currently live, else 0.", node_up(nodes)},
       {"beamscope_vm_memory_bytes", "VM memory in bytes by kind.", vm_memory(nodes)},
       {"beamscope_vm_run_queue", "Total run queue length.", vm_run_queue(nodes)},
+      {"beamscope_vm_gc_count", "Garbage collections in the last window.",
+       gauge(nodes, :vm, & &1.gc_count)},
+      {"beamscope_vm_gc_words_reclaimed", "Words reclaimed by GC in the last window.",
+       gauge(nodes, :vm, & &1.gc_words_reclaimed)},
+      {"beamscope_vm_gc_time_ms", "Time spent in GC (ms) in the last window.",
+       gauge(nodes, :vm, & &1.gc_time_ms)},
+      {"beamscope_vm_reductions", "Reductions executed in the last window.",
+       gauge(nodes, :vm, & &1.reductions)},
+      {"beamscope_vm_io_bytes", "Bytes transferred by direction in the last window.",
+       vm_io(nodes)},
       {"beamscope_vm_uptime_ms", "VM uptime in milliseconds.", vm_uptime(nodes)},
       {"beamscope_scheduler_utilization", "Overall scheduler utilization (0..1).",
        scheduler_utilization(nodes)},
@@ -84,8 +94,22 @@ defmodule BeamScope.Exporter.Prometheus do
       {"processes", memory[:processes]},
       {"binary", memory[:binary]},
       {"ets", memory[:ets]},
-      {"atom", memory[:atom]}
+      {"atom", memory[:atom]},
+      {"code", memory[:code]}
     ]
+  end
+
+  defp vm_io(nodes) do
+    for n <- nodes,
+        vm = first(n, :vm),
+        vm != nil,
+        {direction, value} <- io_directions(vm.io),
+        is_number(value),
+        do: {[node: n.node, direction: direction], value}
+  end
+
+  defp io_directions(io) do
+    [{"input", io[:input]}, {"output", io[:output]}]
   end
 
   defp vm_run_queue(nodes), do: gauge(nodes, :vm, & &1.run_queue)

@@ -1,0 +1,159 @@
+# HELP mehungry_repo_pool_pool_size 
+# TYPE mehungry_repo_pool_pool_size gauge
+mehungry_repo_pool_pool_size 10
+# HELP mehungry_repo_pool_total 
+# TYPE mehungry_repo_pool_total gauge
+mehungry_repo_pool_total 11
+# HELP mehungry_repo_pool_busy 
+# TYPE mehungry_repo_pool_busy gauge
+mehungry_repo_pool_busy 1
+# HELP mehungry_vm_live_view_count 
+# TYPE mehungry_vm_live_view_count gauge
+mehungry_vm_live_view_count 0
+# HELP mehungry_vm_scheduler_weighted 
+# TYPE mehungry_vm_scheduler_weighted gauge
+mehungry_vm_scheduler_weighted 0.20623560124731952
+# HELP mehungry_vm_scheduler_utilization 
+# TYPE mehungry_vm_scheduler_utilization gauge
+mehungry_vm_scheduler_utilization 0.10311780062365976
+# HELP mehungry_vm_process_over_threshold_count 
+# TYPE mehungry_vm_process_over_threshold_count gauge
+mehungry_vm_process_over_threshold_count 0
+# HELP mehungry_vm_process_max_message_queue 
+# TYPE mehungry_vm_process_max_message_queue gauge
+mehungry_vm_process_max_message_queue 0
+# HELP mehungry_cache_size 
+# TYPE mehungry_cache_size gauge
+mehungry_cache_size{cache="geo_cache"} 0
+mehungry_cache_size{cache="recipes_cache"} 0
+mehungry_cache_size{cache="cache_user_tokens"} 0
+# HELP vm_total_run_queue_lengths_io 
+# TYPE vm_total_run_queue_lengths_io histogram
+vm_total_run_queue_lengths_io_bucket{le="1"} 94
+vm_total_run_queue_lengths_io_bucket{le="5"} 94
+vm_total_run_queue_lengths_io_bucket{le="10"} 94
+vm_total_run_queue_lengths_io_bucket{le="50"} 94
+vm_total_run_queue_lengths_io_bucket{le="100"} 94
+vm_total_run_queue_lengths_io_bucket{le="500"} 94
+vm_total_run_queue_lengths_io_bucket{le="1000"} 94
+vm_total_run_queue_lengths_io_bucket{le="5000"} 94
+vm_total_run_queue_lengths_io_bucket{le="10000"} 94
+vm_total_run_queue_lengths_io_bucket{le="50000"} 94
+vm_total_run_queue_lengths_io_bucket{le="+Inf"} 94
+vm_total_run_queue_lengths_io_sum 0
+vm_total_run_queue_lengths_io_count 94
+# HELP vm_total_run_queue_lengths_cpu 
+# TYPE vm_total_run_queue_lengths_cpu histogram
+vm_total_run_queue_lengths_cpu_bucket{le="1"} 94
+vm_total_run_queue_lengths_cpu_bucket{le="5"} 94
+vm_total_run_queue_lengths_cpu_bucket{le="10"} 94
+vm_total_run_queue_lengths_cpu_bucket{le="50"} 94
+vm_total_run_queue_lengths_cpu_bucket{le="100"} 94
+vm_total_run_queue_lengths_cpu_bucket{le="500"} 94
+vm_total_run_queue_lengths_cpu_bucket{le="1000"} 94
+vm_total_run_queue_lengths_cpu_bucket{le="5000"} 94
+vm_total_run_queue_lengths_cpu_bucket{le="10000"} 94
+vm_total_run_queue_lengths_cpu_bucket{le="50000"} 94
+vm_total_run_queue_lengths_cpu_bucket{le="+Inf"} 94
+vm_total_run_queue_lengths_cpu_sum 2
+vm_total_run_queue_lengths_cpu_count 94
+# HELP vm_total_run_queue_lengths_total 
+# TYPE vm_total_run_queue_lengths_total histogram
+vm_total_run_queue_lengths_total_bucket{le="1"} 94
+vm_total_run_queue_lengths_total_bucket{le="5"} 94
+vm_total_run_queue_lengths_total_bucket{le="10"} 94
+vm_total_run_queue_lengths_total_bucket{le="50"} 94
+vm_total_run_queue_lengths_total_bucket{le="100"} 94
+vm_total_run_queue_lengths_total_bucket{le="500"} 94
+vm_total_run_queue_lengths_total_bucket{le="1000"} 94
+vm_total_run_queue_lengths_total_bucket{le="5000"} 94
+vm_total_run_queue_lengths_total_bucket{le="10000"} 94
+vm_total_run_queue_lengths_total_bucket{le="50000"} 94
+vm_total_run_queue_lengths_total_bucket{le="+Inf"} 94
+vm_total_run_queue_lengths_total_sum 2
+vm_total_run_queue_lengths_total_count 94
+# HELP vm_memory_total 
+# TYPE vm_memory_total histogram
+vm_memory_total_bucket{le="1"} 0
+vm_memory_total_bucket{le="5"} 0
+vm_memory_total_bucket{le="10"} 0
+vm_memory_total_bucket{le="50"} 0
+vm_memory_total_bucket{le="100"} 0
+vm_memory_total_bucket{le="500"} 0
+vm_memory_total_bucket{le="1000"} 0
+vm_memory_total_bucket{le="5000"} 0
+vm_memory_total_bucket{le="10000"} 0
+vm_memory_total_bucket{le="50000"} 0
+vm_memory_total_bucket{le="+Inf"} 562
+vm_memory_total_sum 65008911.784
+vm_memory_total_count 562
+# HELP mehungry_repo_query_queue_time 
+# TYPE mehungry_repo_query_queue_time histogram
+mehungry_repo_query_queue_time_bucket{le="10"} 2787
+mehungry_repo_query_queue_time_bucket{le="50"} 2787
+mehungry_repo_query_queue_time_bucket{le="100"} 2787
+mehungry_repo_query_queue_time_bucket{le="250"} 2787
+mehungry_repo_query_queue_time_bucket{le="500"} 2787
+mehungry_repo_query_queue_time_bucket{le="1000"} 2787
+mehungry_repo_query_queue_time_bucket{le="2500"} 2787
+mehungry_repo_query_queue_time_bucket{le="5000"} 2787
+mehungry_repo_query_queue_time_bucket{le="10000"} 2787
+mehungry_repo_query_queue_time_bucket{le="+Inf"} 2787
+mehungry_repo_query_queue_time_sum 1160.8536290000009
+mehungry_repo_query_queue_time_count 2787
+# HELP mehungry_repo_query_query_time 
+# TYPE mehungry_repo_query_query_time histogram
+mehungry_repo_query_query_time_bucket{le="10"} 6320
+mehungry_repo_query_query_time_bucket{le="50"} 6320
+mehungry_repo_query_query_time_bucket{le="100"} 6320
+mehungry_repo_query_query_time_bucket{le="250"} 6320
+mehungry_repo_query_query_time_bucket{le="500"} 6320
+mehungry_repo_query_query_time_bucket{le="1000"} 6320
+mehungry_repo_query_query_time_bucket{le="2500"} 6320
+mehungry_repo_query_query_time_bucket{le="5000"} 6320
+mehungry_repo_query_query_time_bucket{le="10000"} 6320
+mehungry_repo_query_query_time_bucket{le="+Inf"} 6320
+mehungry_repo_query_query_time_sum 2896.638573000002
+mehungry_repo_query_query_time_count 6320
+# HELP mehungry_repo_query_total_time 
+# TYPE mehungry_repo_query_total_time histogram
+mehungry_repo_query_total_time_bucket{le="10"} 6320
+mehungry_repo_query_total_time_bucket{le="50"} 6320
+mehungry_repo_query_total_time_bucket{le="100"} 6320
+mehungry_repo_query_total_time_bucket{le="250"} 6320
+mehungry_repo_query_total_time_bucket{le="500"} 6320
+mehungry_repo_query_total_time_bucket{le="1000"} 6320
+mehungry_repo_query_total_time_bucket{le="2500"} 6320
+mehungry_repo_query_total_time_bucket{le="5000"} 6320
+mehungry_repo_query_total_time_bucket{le="10000"} 6320
+mehungry_repo_query_total_time_bucket{le="+Inf"} 6320
+mehungry_repo_query_total_time_sum 4070.0533250000017
+mehungry_repo_query_total_time_count 6320
+# HELP phoenix_router_dispatch_stop_duration 
+# TYPE phoenix_router_dispatch_stop_duration histogram
+phoenix_router_dispatch_stop_duration_bucket{route="/metrics",le="10"} 3
+phoenix_router_dispatch_stop_duration_bucket{route="/metrics",le="50"} 3
+phoenix_router_dispatch_stop_duration_bucket{route="/metrics",le="100"} 3
+phoenix_router_dispatch_stop_duration_bucket{route="/metrics",le="250"} 3
+phoenix_router_dispatch_stop_duration_bucket{route="/metrics",le="500"} 3
+phoenix_router_dispatch_stop_duration_bucket{route="/metrics",le="1000"} 3
+phoenix_router_dispatch_stop_duration_bucket{route="/metrics",le="2500"} 3
+phoenix_router_dispatch_stop_duration_bucket{route="/metrics",le="5000"} 3
+phoenix_router_dispatch_stop_duration_bucket{route="/metrics",le="10000"} 3
+phoenix_router_dispatch_stop_duration_bucket{route="/metrics",le="+Inf"} 3
+phoenix_router_dispatch_stop_duration_sum{route="/metrics"} 17.242131
+phoenix_router_dispatch_stop_duration_count{route="/metrics"} 3
+# HELP phoenix_endpoint_stop_duration 
+# TYPE phoenix_endpoint_stop_duration histogram
+phoenix_endpoint_stop_duration_bucket{le="10"} 2
+phoenix_endpoint_stop_duration_bucket{le="50"} 3
+phoenix_endpoint_stop_duration_bucket{le="100"} 3
+phoenix_endpoint_stop_duration_bucket{le="250"} 3
+phoenix_endpoint_stop_duration_bucket{le="500"} 3
+phoenix_endpoint_stop_duration_bucket{le="1000"} 3
+phoenix_endpoint_stop_duration_bucket{le="2500"} 3
+phoenix_endpoint_stop_duration_bucket{le="5000"} 3
+phoenix_endpoint_stop_duration_bucket{le="10000"} 3
+phoenix_endpoint_stop_duration_bucket{le="+Inf"} 3
+phoenix_endpoint_stop_duration_sum 18.786715
+phoenix_endpoint_stop_duration_count 3
