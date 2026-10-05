@@ -1,9 +1,8 @@
-# BeamScope
-<p align="center">
-  <img src="logo.png" alt="My Project Logo" width="200">
-</p> 
+BeamScope
 
-**A BEAM-native observability runtime for Elixir/OTP.**
+<p align="center"> <img src="logo.png" alt="BeamScope logo" width="200"> </p>
+
+<p align="center"> <strong>A BEAM-native observability runtime for Elixir/OTP.</strong> </p>
 
 BeamScope maintains a coherent, **distributed runtime model** of an Elixir cluster and exports
 that model to existing observability ecosystems. It is deliberately *not* an OpenTelemetry
