@@ -2,6 +2,7 @@
 <p align="center">
   <img src="logo.png" alt="My Project Logo" width="200">
 </p> 
+
 **A BEAM-native observability runtime for Elixir/OTP.**
 
 BeamScope maintains a coherent, **distributed runtime model** of an Elixir cluster and exports
